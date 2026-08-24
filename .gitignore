@@ -1,0 +1,29 @@
+# Python virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+
+# Caches and internal tool directories
+.omo/
+.codegraph/
+
+# Data and renders (Ignore large binaries, but we might force add one specific render later)
+*.npz
+*.png
+*.jpg
+*.html
+!README.md
+!botanical_schema.json
+
+# OS generated files
+.DS_Store

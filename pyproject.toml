@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flora-sim"
+version = "0.1.0"
+description = "Headless, vectorized mathematical botanical simulation engine based on primary algorithmic-botany literature"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "HPC Computational Botany Architect" }
+]
+dependencies = [
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+]
+
+[project.optional-dependencies]
+viz = [
+    "matplotlib>=3.8.0",
+]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["flora*", "viewers*"]

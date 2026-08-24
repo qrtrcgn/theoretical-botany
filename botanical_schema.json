@@ -1,0 +1,19 @@
+{
+  "habitus": {
+    "wuchsform": ["aufrecht", "kriechend", "kletternd", "hängend", "polsterförmig", "rosettenbildend"],
+    "lebensform": ["annuell", "bienne", "perenn", "gehölz", "kraut"]
+  },
+  "sprossachse": {
+    "querschnitt": ["rund", "vierkantig", "gefurcht", "gerieft"],
+    "oberflaeche": ["glatt", "behaart", "stachelig", "bereift"]
+  },
+  "blaetter": {
+    "stellung": ["wechselständig", "gegenständig", "quirlständig"],
+    "form": ["eiförmig", "lanzettlich", "herzförmig", "spatelförmig", "fiederspaltig"],
+    "rand": ["ganzrandig", "gezähnt", "gesägt", "gelappt"]
+  },
+  "blueten": {
+    "bluetenstand": ["traube", "aehre", "rispe", "dolde", "koepfchen", "einzelbluete"],
+    "symmetrie": ["radiaersymmetrisch", "zygomorph", "asymmetrisch"]
+  }
+}
