@@ -48,8 +48,8 @@ def update_radii(ctx: SimulationContext, dt: float = 1.0) -> None:
     )
 
     # --- per-node pipe exponent --------------------------------------- #
-    woody = state.woodiness[:n] >= 0.5
-    n_exp = np.where(woody, mech.pipe_exponent_wood, mech.pipe_exponent_herb)
+    w = state.woodiness[:n]
+    n_exp = mech.pipe_exponent_herb + (mech.pipe_exponent_wood - mech.pipe_exponent_herb) * w
 
     # --- bottom-up accumulation, deepest level first ------------------- #
     levels = state.levels()

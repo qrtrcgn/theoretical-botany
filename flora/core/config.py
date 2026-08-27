@@ -149,6 +149,16 @@ class InflorescenceConfig:
             raise ValueError(f"growth_habit must be one of {_VALID_HABIT}")
 
 
+
+@dataclass(frozen=True)
+class EnvironmentConfig:
+    latitude: float = 45.0
+    base_temp: float = 10.0
+    temp_amplitude: float = 20.0
+    frost_threshold: float = 0.0
+    bud_break_threshold: float = 12.0
+    days_per_cycle: float = 5.0
+
 @dataclass(frozen=True)
 class EngineConfig:
     """Top-level engine configuration aggregating all sub-domains."""
@@ -159,6 +169,7 @@ class EngineConfig:
     physiology: PhysiologyConfig = field(default_factory=PhysiologyConfig)
     mechanics: MechanicsConfig = field(default_factory=MechanicsConfig)
     inflorescence: InflorescenceConfig = field(default_factory=InflorescenceConfig)
+    environment: EnvironmentConfig = field(default_factory=EnvironmentConfig)
 
     def __post_init__(self) -> None:
         if self.capacity < 1:

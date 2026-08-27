@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
+from flora.core.environment import EnvironmentState
 
 import numpy as np
 
@@ -28,6 +29,7 @@ class SimulationContext:
     time: float = 0.0
     step_index: int = 0
     cache: dict[str, Any] = field(default_factory=dict)
+    env: EnvironmentState = field(default_factory=EnvironmentState)
 
 
 #: A pass mutates ctx.state in place. dt is the simulation-cycle delta.

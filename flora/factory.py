@@ -30,12 +30,16 @@ from flora.biology.inflorescence import (
     vegetativeness_decay_step,
 )
 from flora.biology.vigor import vigor_allocation_step
+from flora.physics.environment import weather_step, seasonal_dieback_step, spring_awakening_step
 from flora.physics.biomechanics import bending_pass
 from flora.physics.pipe_model import update_radii
 
 __all__ = ["DEFAULT_PASSES", "create_default_engine"]
 
 DEFAULT_PASSES = (
+    weather_step,
+    seasonal_dieback_step,
+    spring_awakening_step,
     vegetativeness_decay_step,
     auxin_transport_step,
     vigor_allocation_step,
