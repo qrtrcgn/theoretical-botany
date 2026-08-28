@@ -1,72 +1,12 @@
-"""Inflorescence morphogenesis and Vegetativeness (v) decay (Prusinkiewicz).
+import re
 
-Models the floral transition through an architectural parameter v in [0, v_max]:
+with open("flora/biology/inflorescence.py", "r") as f:
+    content = f.read()
 
-    L(v) = L_max * (v / v_max)^p
+# We need to completely rewrite floral_transition_step to use a 2-batch architecture
+# so that lateral branches originate from the TIP of the newly created segment, not the BASE.
 
-Internodes compress nonlinearly as the apex exhausts its vegetative potential,
-generating classical botanical inflorescences:
-
-- RACEME: indeterminate monopodial axis; lateral flowers pedicellate.
-- PANICLE: branched raceme with secondary axes carrying reduced v.
-- CYME: determinate sympodial program; terminal flower terminates main axis,
-  growth resumes from bilateral lateral branches.
-- SINGLE: solitary terminal flower.
-"""
-
-from __future__ import annotations
-
-import numpy as np
-
-from flora.core.config import (
-    APEX,
-    FLORAL_AXIS,
-    FLOWER,
-    InflorescenceConfig,
-    MorphologyConfig,
-)
-from flora.core.context import SimulationContext
-from flora.core.spatial import (
-    UP_VECTOR,
-    quat_from_axis_angle,
-    quat_multiply,
-    quat_rotate,
-    random_unit_axes,
-)
-
-_ROT_Y = np.array([0.0, 1.0, 0.0])
-_ROT_Z = np.array([0.0, 0.0, 1.0])
-
-
-def vegetativeness_decay_step(ctx: SimulationContext, dt: float = 1.0) -> None:
-    """Age the tree and decay vegetative potential across meristems."""
-    state = ctx.state
-    infl: InflorescenceConfig = ctx.config.inflorescence
-    n = state.n
-    if n == 0:
-        return
-
-    # Plant-wide aging
-    state.age[:n] += dt
-
-    # Active floral axes consume v rapidly
-    floral_mask = (state.node_type[:n] == int(FLORAL_AXIS)) & state.alive[:n]
-    state.vegetativeness[:n] = np.where(
-        floral_mask,
-        np.maximum(0.0, state.vegetativeness[:n] - dt * infl.v_decay),
-        state.vegetativeness[:n],
-    )
-
-    # Vegetative apices age slowly toward competence
-    apex_mask = (state.node_type[:n] == int(APEX)) & state.alive[:n]
-    state.vegetativeness[:n] = np.where(
-        apex_mask,
-        np.maximum(0.0, state.vegetativeness[:n] - 0.02 * dt),
-        state.vegetativeness[:n],
-    )
-
-
-
+new_func = """
 def floral_transition_step(ctx: SimulationContext, dt: float = 1.0) -> None:
     del dt
     state = ctx.state
@@ -120,7 +60,7 @@ def floral_transition_step(ctx: SimulationContext, dt: float = 1.0) -> None:
         # Calculate the future index of the main continuing node (Batch 1)
         future_idx = state.n + len(b1_parents)
 
-        if itype in ["raceme", "spike"]:
+        if itype == "raceme":
             b1_parents.append(axis)
             b1_types.append(int(FLORAL_AXIS))
             b1_pos.append(tip_pos)
@@ -138,11 +78,10 @@ def floral_transition_step(ctx: SimulationContext, dt: float = 1.0) -> None:
                 # Lateral flower originates from the NEW tip (future_idx)
                 b2_parents.append(future_idx)
                 b2_types.append(int(FLOWER))
-                # Spike has 0 pedicel, Raceme has 1.5cm pedicel
-                pedicel_len = 0.015 if itype == "raceme" else 0.001
-                b2_pos.append(tip_pos + quat_rotate(fl_quat, UP_VECTOR) * pedicel_len)
+                # Add a visible 1.5cm pedicel length
+                b2_pos.append(tip_pos + quat_rotate(fl_quat, UP_VECTOR) * 0.015)
                 b2_orient.append(fl_quat)
-                b2_len.append(pedicel_len)
+                b2_len.append(0.015)
                 b2_veg.append(0.0)
                 b2_mass.append(morph.flower_mass)
             consumed.add(axis)
@@ -214,3 +153,14 @@ def floral_transition_step(ctx: SimulationContext, dt: float = 1.0) -> None:
             vegetativeness=np.asarray(b2_veg, dtype=np.float64),
             structural_mass=np.asarray(b2_mass, dtype=np.float64),
         )
+"""
+
+start_idx = content.find("def floral_transition_step")
+if start_idx != -1:
+    content = content[:start_idx] + new_func
+    with open("flora/biology/inflorescence.py", "w") as f:
+        f.write(content)
+    print("Patched successfully.")
+else:
+    print("Could not find function.")
+

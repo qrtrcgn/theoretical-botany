@@ -89,3 +89,59 @@ def test_decoupling_import_contract() -> None:
                     offending.append(f"{py_file}: forbidden import statement {line.strip()}")
 
     assert not offending, f"Decoupling import violation detected under flora/: {offending}"
+
+
+def test_pruning_and_canalization_regrowth() -> None:
+    """Verify that pruning a branch kills descendants and triggers regrowth from cut dormant bud."""
+    from flora.core.config import NodeType
+
+    engine = create_default_engine(EngineConfig(seed=42))
+    # Grow initial tree
+    for _ in range(12):
+        engine.step(1.0)
+
+    n_initial = engine.state.n
+    live_mask_initial = engine.state.alive[:n_initial]
+    assert np.sum(live_mask_initial) > 10
+
+    # Find a middle stem node with descendants
+    parent = engine.state.parent[:n_initial]
+    cut_node = None
+    descendants = []
+    for candidate in range(3, n_initial):
+        if engine.state.alive[candidate] and engine.state.node_type[candidate] == int(NodeType.INTERNODE):
+            cand_desc = []
+            frontier = [candidate]
+            while frontier:
+                curr = frontier.pop(0)
+                children = np.flatnonzero(parent == curr).tolist()
+                cand_desc.extend(children)
+                frontier.extend(children)
+            if len(cand_desc) >= 3:
+                cut_node = candidate
+                descendants = cand_desc
+                break
+
+    assert cut_node is not None, "Should find a branch with descendants to prune"
+
+    # Prune
+    engine.state.alive[descendants] = False
+    engine.state.auxin[descendants] = 0.0
+    engine.state.node_type[cut_node] = int(NodeType.BUD_DORMANT)
+    engine.state.auxin[cut_node] = 0.0
+    engine.state.topology_version += 1
+    engine.state._cache.clear()
+
+    assert engine.state.node_type[cut_node] == int(NodeType.BUD_DORMANT)
+    assert not np.any(engine.state.alive[descendants])
+
+    # Regrowth steps
+    for _ in range(10):
+        engine.step(1.0)
+
+    # The dormant bud at cut_node should have activated into APEX/INTERNODE and sprouted
+    assert engine.state.alive[cut_node]
+    assert engine.state.node_type[cut_node] in (int(NodeType.INTERNODE), int(NodeType.APEX))
+    # New nodes should have spawned
+    assert engine.state.n > n_initial
+

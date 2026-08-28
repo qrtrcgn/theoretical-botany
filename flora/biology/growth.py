@@ -63,7 +63,7 @@ def elongation_step(ctx: SimulationContext, dt: float = 1.0) -> None:
             return
 
     k = eligible.size
-    jitter = ctx.rng.uniform(-morph.radial_jitter, morph.radial_jitter, size=k)
+    jitter = ctx.rng.normal(0, morph.radial_jitter * 0.5, size=k)
     axes = random_unit_axes(k, ctx.rng)
     dq = quat_from_axis_angle(axes, jitter)
 
@@ -74,7 +74,7 @@ def elongation_step(ctx: SimulationContext, dt: float = 1.0) -> None:
     lengths = (
         morph.internode_length_max
         * morph.length_depth_decay**depths
-        * ctx.rng.uniform(0.9, 1.1, size=k)
+        * ctx.rng.normal(1.0, 0.1, size=k)
     )
 
     new_pos = state.position[eligible] + quat_rotate(seg_quat, UP_VECTOR) * lengths[:, None]
@@ -128,7 +128,9 @@ def budding_step(ctx: SimulationContext, dt: float = 1.0) -> None:
             azimuths = [base, base + 2.0 * np.pi / 3.0, base + 4.0 * np.pi / 3.0]
         for az in azimuths:
             spawn_parents.append(p)
-            spawn_azimuths.append(float(az % (2.0 * np.pi)))
+            # Add some natural jitter so it doesn't look like a perfect mathematical fibonacci spiral
+            jitter = float(ctx.rng.normal(0, 0.2))
+            spawn_azimuths.append(float((az + jitter) % (2.0 * np.pi)))
         counters[p] = k + 1
 
     projected = n + len(spawn_parents)
@@ -144,9 +146,11 @@ def budding_step(ctx: SimulationContext, dt: float = 1.0) -> None:
         qz = quat_from_axis_angle(
             np.broadcast_to(np.array([0.0, 0.0, 1.0]), (azimuths_arr.size, 3)), azimuths_arr
         )
+        # Add natural stochastic variance to the branch angle
+        angle_variance = ctx.rng.normal(0, 0.1, size=azimuths_arr.size)
         q_branch = quat_from_axis_angle(
             np.broadcast_to(np.array([1.0, 0.0, 0.0]), (azimuths_arr.size, 3)),
-            np.full(azimuths_arr.size, morph.branch_angle),
+            np.clip(morph.branch_angle + angle_variance, 0.1, 1.5),
         )
         q_bud = quat_multiply(quat_multiply(q_parent, qz), q_branch)
         state.add_nodes(

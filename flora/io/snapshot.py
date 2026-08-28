@@ -30,6 +30,7 @@ FIELD_ORDER = (
     "deflection",
     "depth",
     "node_type",
+    "alive",
 )
 
 

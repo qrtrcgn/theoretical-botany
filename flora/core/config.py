@@ -33,7 +33,7 @@ STRUCTURAL_TYPES = frozenset({NodeType.INTERNODE, NodeType.APEX, NodeType.FLORAL
 
 _VALID_PHYLLOTAXIS = frozenset({"alternate", "opposite", "whorled"})
 _VALID_INFLORESCENCE = frozenset({"single", "raceme", "panicle", "cyme"})
-_VALID_HABIT = frozenset({"monopodial", "sympodial"})
+_VALID_HABIT = frozenset({"monopodial", "sympodial", "climbing"})
 
 
 @dataclass(frozen=True)
