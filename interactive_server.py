@@ -57,45 +57,48 @@ def serialize_nodes(engine, pheno):
     alive = snap['alive'][:n] if 'alive' in snap else engine.state.alive[:n]
     woodiness = snap['woodiness'][:n] if 'woodiness' in snap else np.zeros(n)
     
+    # We need to compute headings for each node to get its tip position
+    from flora.core.spatial import quat_rotate, UP_VECTOR
+    import numpy as np
+    
+    headings = quat_rotate(snap['orientation'][:n], UP_VECTOR)
+    lengths = snap['internode_length'][:n]
+    
     nodes_json = []
     for i in range(1, n):
         if not alive[i]:
             continue
-        p_idx = int(parent[i])
-        if p_idx < 0 or not alive[p_idx]:
-            continue
-        p1 = pos[p_idx]
-        p2 = pos[i]
-        
-        dx = float(p2[0] - p1[0])
-        dy = float(p2[1] - p1[1])
-        dz = float(p2[2] - p1[2])
-        dist = float(np.linalg.norm([dx, dy, dz]))
-        
-        if dist < 1e-5:
-            dir_x, dir_y, dir_z = 0.0, 1.0, 0.0
-        else:
-            dir_x, dir_y, dir_z = dx / dist, dy / dist, dz / dist
             
+        # Node's base is pos[i]
+        p1 = pos[i]
+        
+        # Node's tip is pos[i] + heading * length
+        length = float(lengths[i])
+        
+        dir_x = float(headings[i][0])
+        dir_y = float(headings[i][1])
+        dir_z = float(headings[i][2])
+        
         ntype = 'stem'
         if types[i] == NodeType.FLOWER:
             ntype = 'flower'
-        elif types[i] == NodeType.LEAF or types[i] == 1 or types[i] == 0:
+        elif types[i] == NodeType.LEAF or types[i] == int(NodeType.BUD_DORMANT) or types[i] == int(NodeType.APEX):
             ntype = 'leaf'
         elif types[i] == NodeType.FLORAL_AXIS or types[i] == 3:
             ntype = 'floral_axis'
             
         node_dict = {
             'id': int(i),
-            'parentId': int(p_idx),
+            'parentId': int(parent[i]),
             'type': ntype,
             'nodeType': int(types[i]),
             'pos': {'x': float(p1[0] * 100), 'y': float(p1[1] * 100), 'z': float(p1[2] * 100)},
             'dir': {'x': dir_x, 'y': dir_y, 'z': dir_z},
-            'currentLength': dist * 100,
+            'currentLength': length * 100,
             'depth': 0,
             'age': float(woodiness[i] * 120) if ntype in ('stem', 'floral_axis') else 0,
         }
+
         
         if ntype == 'flower':
             col_alleles = pheno.get(9, [0]) if pheno else [0]

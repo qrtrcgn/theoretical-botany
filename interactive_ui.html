@@ -134,19 +134,19 @@
                   ctx.lineWidth = 1.5;
               } else {
                   ctx.strokeStyle = 'rgb('+(45*(1-wood)+120*wood)+','+(140*(1-wood)+80*wood)+','+(70*(1-wood)+40*wood)+')'; 
-                  ctx.lineWidth = Math.max(2, 8 * wood); // Dicke basierend auf Alter (woodiness)
+                  ctx.lineWidth = Math.max(1, 4 * wood); // Filigranere Dicke
               }
+              
+              // Smooth joints (keine harten Kanten mehr an den Segmentübergängen)
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              
               ctx.beginPath(); 
               ctx.moveTo(p1.x, p1.y); 
               
-              // Wölbung (Curvature) - sanfte Biegung nach unten (Schwerkraft-Fake)
-              let mx = (p1.x + p2.x) / 2;
-              let my = (p1.y + p2.y) / 2;
-              let dx = p2.x - p1.x;
-              // Leichter Durchhang in Y-Richtung basierend auf der horizontalen Ausdehnung
-              my += Math.abs(dx) * 0.15; 
-              
-              ctx.quadraticCurveTo(mx, my, p2.x, p2.y); 
+              // Wir nutzen die echte 3D-Biegung (Euler-Bernoulli) der Python-Engine!
+              // Der 2D-Fake mit quadraticCurveTo hat die Tangenten der Segmente zerstört.
+              ctx.lineTo(p2.x, p2.y); 
               ctx.stroke();
           } else {
               const p2 = toIso(
@@ -159,12 +159,11 @@
               if (n.currentLength > 0.01) {
                   ctx.strokeStyle = 'rgba(34, 197, 94, 0.7)';
                   ctx.lineWidth = 1;
+                  ctx.lineCap = 'round';
+                  ctx.lineJoin = 'round';
                   ctx.beginPath();
                   ctx.moveTo(p1.x, p1.y);
-                  let mx = (p1.x + p2.x) / 2;
-                  let my = (p1.y + p2.y) / 2;
-                  my += Math.abs(p2.x - p1.x) * 0.15;
-                  ctx.quadraticCurveTo(mx, my, p2.x, p2.y);
+                  ctx.lineTo(p2.x, p2.y);
                   ctx.stroke();
               }
               
