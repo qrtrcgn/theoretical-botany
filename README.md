@@ -25,18 +25,33 @@ A high-performance, headless mathematical simulation engine for procedural plant
 5. **L-System Inflorescence Grammars**:
    - Vegetativeness decay ($v \to 0$) driving floral internode compression $L(v) = L_{max} \cdot (v/v_{max})^p$, yielding racemes, panicles, cymes, and solitary flowers.
 
+6. **Multi-Year Seasonal Environment**:
+   - 365-day weather model (temperature from base + amplitude · season + noise; light/water/nutrients with `growth_factor = min(...)` per Liebig's law), frost dieback of non-lignified tips and flowers, spring bud-break from mature dormant buds on woody wood, and a self-shadowing light-occlusion pass (inner-canopy starvation).
+
+7. **Thigmotropism & Floor Collision**:
+   - Climbing-vine heading control (inward + tangential swirl around a Z pole) plus a ground-plane clamp with downward-heading reflection.
+
+8. **Polyploid Genetics**:
+   - `flora/biology/genetics.py`: `Genome` (polyploid allele strands) with rigorous meiosis — homolog segregation, crossover, unequal crossover (deletions/duplications) and non-disjunction (aneuploidy) — plus `breed()` crossing and phenotype-pool extraction used to configure plant morphology/flower traits.
+
+- **Interactive Web App**: `interactive_server.py` serves an isometric 2.5D canvas (`interactive_ui.html`) with live simulation, click-to-prune with Mitchison auxin re-routing, and genetic breeding via a JSON API on port 8000. A static offline export lives in `viewers/html_iso_viewer.py`.
+
 ---
 
 ## Package Architecture
 
 ```
 flora/
-├── core/         # SoA state container, quaternion spatial math, sparse graph Kahn traversals, config
-├── biology/      # Mitchison Auxin ODEs, Borchert-Honda Vigor, L-System floral grammars, elongation
-├── physics/      # Euler-Bernoulli cantilever bending, Da Vinci pipe model, tissue maturation
+├── core/         # SoA state container, quaternion spatial math, sparse graph Kahn traversals, config, environment state
+├── biology/      # Mitchison Auxin ODEs, Borchert-Honda Vigor, L-System floral grammars, elongation, polyploid genetics
+├── physics/      # Euler-Bernoulli bending, Da Vinci pipe model, tissue maturation, weather/seasons, collision/climbing
 ├── io/           # Non-blocking snapshotting, .npz serializer / deserializer
 └── factory.py    # Composition root wiring the default botanical pipeline
-viewers/          # Decoupled visualization clients (Matplotlib 3D, CLI)
+viewers/          # Decoupled visualization clients (Matplotlib 3D, HTML isometric)
+examples/         # Headless batch run
+scripts/          # Dev/demo/inspection utilities (seasons demo, snapshot inspection, dev server, API smoke test)
+interactive_server.py  # JSON API + serves the interactive 2.5D web app
+interactive_ui.html   # Hand-authored isometric plant canvas (served by interactive_server.py)
 ```
 
 ---

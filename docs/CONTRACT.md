@@ -260,9 +260,9 @@ simply: apply gate to all, monopodial/sympodial handled in budding):
   normalize(heading_old + gravitropic_bias·ĝ_up + jitter), tiny)
   PLUS phototropic straightening: bias toward previous heading (momentum) — keep simple:
   new_quat = quat_multiply(parent_quat, quat_from_axis_angle(random small axis, jitter))
-  jitter ~ U(±radial_jitter) via ctx.rng
+  jitter ~ Gaussian N(0, radial_jitter·0.5) via ctx.rng   # bell-curve variance
 - internode_length of NEW apex's parent segment = morphology.internode_length_max ·
-  length_depth_decay**depth · U(1−jit, 1+jit)
+  length_depth_decay**depth · N(1.0, 0.1)              # Gaussian around nominal length
 - position[new] = position[old] + quat_rotate(new_quat_of_parent_segment, (0,0,L))
 - structural_mass[segment] = physics.materials.segment_mass(...)  (import from physics OK?
   NO — biology must not import physics. Compute mass inline with π r² L ρ using current
@@ -330,7 +330,7 @@ Bottom-up level-synchronous (levels descending):
 ```
 tips (no alive structural children): r = tip_radius_min
 level d: acc[p] += Σ_children r_c**n_c ; then r_p = acc[p]**(1/n_p)
-n per-node: pipe_exponent_wood if woodiness≥0.5 else pipe_exponent_herb
+n per-node (continuous taper): n_exp = pipe_exponent_herb + (pipe_exponent_wood − pipe_exponent_herb)·w
 FLOOR: r_p = max(r_p, tip_radius_min)
 ```
 Also update woodiness per §8.1 rule. All vectorized via bincount per level.
@@ -354,6 +354,31 @@ Write |M_i| into state.moment, Δθ into state.deflection.
 CONVERGENCE FACT (for tests): rigid-link incremental integration converges to analytic
 cantilever δ=W L³/(3EI) as segmentation refines; test uses ≥50 segments, tol 3%.
 
+### 8.4 environment.py [physics/environment.py] — WEATHER & SEASONS
+```
+weather_step(ctx, dt):            day = ctx.time·days_per_cycle + 90; phase→season sin;
+                                  T = base + amplitude·season + noise(±3°C);
+                                  env.light = clip(0.4+0.6·season); env.water walk ±0.1
+seasonal_dieback_step(ctx, dt):   if T < frost_threshold: kill FLOWER and herbaceous
+                                  (w<0.2) APEX/FLORAL_AXIS tips (depth>0) via state.kill
+spring_awakening_step(ctx, dt):   if T > bud_break_threshold and growth_factor>0.5:
+                                  wake ~5%/step of mature (parent w>0.5) BUD_DORMANT →
+                                  APEX with v=v_max, vigor=bud_activation_vigor
+light_occlusion_pass(ctx, dt):    self-shadowing: 2D XY canopy grid (5cm); vulnerable
+                                  nodes (APEX/BUD/FLOWER) below canopy max−0.2m in a
+                                  column of density>3 are starved → state.kill
+```
+EnvironmentState (core/environment.py) carries temperature/light/water/nutrients and a
+`growth_factor` = min(light, water, nutrients) (Liebig's law of the minimum).
+
+### 8.5 collision.py [physics/collision.py] — GROUND & CLIMBING
+```
+floor_collision_pass(ctx, dt):    ground_z=0.01; nodes below are clamped to ground, bad
+                                  (downward) headings reflected; when growth_habit=="climbing"
+                                  headings are pulled inward + tangential toward the Z-axis
+                                  (thigmotropism) before the floor clamp.
+```
+
 ## 9. IO (io/snapshot.py)
 ```python
 FIELD_ORDER = ("parent","position","orientation","radius","auxin","pin","vigor",
@@ -366,13 +391,18 @@ def load_npz(path) -> dict[str, Any]    # returns same dict shape (not a live Pl
 
 ## 10. FACTORY (flora/factory.py) — composition root
 ```python
-DEFAULT_PASSES = (vegetativeness_decay_step, auxin_transport_step, vigor_allocation_step,
-                  budding_step, floral_transition_step, elongation_step,
-                  update_radii, bending_pass)
+DEFAULT_PASSES = (weather_step, seasonal_dieback_step, light_occlusion_pass,
+                  spring_awakening_step, vegetativeness_decay_step, auxin_transport_step,
+                  vigor_allocation_step, budding_step, floral_transition_step,
+                  elongation_step, update_radii, bending_pass, floor_collision_pass)
 def create_default_engine(config: EngineConfig | None = None) -> SimulationEngine
 ```
-NOTE ordering: budding BEFORE floral_transition BEFORE elongation so new buds can activate
-next cycle; elongation LAST among bio so positions reflect this cycle's births; physics last.
+NOTE ordering: environment weather runs FIRST so bio/physiology passes see current-season
+temperature/light, with dieback and light-occlusion (starvation) applied before spring
+awakening re-activates buds; floral_transition BEFORE elongation so new buds activate
+next cycle; elongation LAST among bio so positions reflect this cycle's births; then
+the pipe model updates radii on the settled topology, bending last, and floor_collision
+clamps the final geometry to the ground plane.
 (If during integration an ordering bug appears, fix HERE, not in passes.)
 
 ## 11. DETERMINISM & STYLE

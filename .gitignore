@@ -4,6 +4,12 @@ env/
 venv/
 ENV/
 
+# Python virtual environments
+.venv/
+env/
+venv/
+ENV/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -13,17 +19,26 @@ __pycache__/
 .pytest_cache/
 .coverage
 
+# Build / packaging artifacts
+*.egg-info/
+build/
+dist/
+
 # Caches and internal tool directories
 .omo/
 .codegraph/
 
-# Data and renders (Ignore large binaries, but we might force add one specific render later)
+# Data and renders (large binaries regenerated at runtime)
 *.npz
 *.png
 *.jpg
+
+# Generated standalone HTML experiments (hand-authored HTML/JS sources stay tracked)
 *.html
-!README.md
-!botanical_schema.json
+!interactive_ui.html
+
+# OS generated files
+.DS_Store
 
 # OS generated files
 .DS_Store

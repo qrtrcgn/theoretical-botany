@@ -31,8 +31,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cycles", type=int, default=60, help="simulation cycles")
     parser.add_argument("--dt", type=float, default=1.0, help="dt per step")
     parser.add_argument("--seed", type=int, default=7, help="RNG seed (determinism)")
-    parser.add_argument("--habit", choices=("monopodial", "sympodial"), default="monopodial")
-    parser.add_argument("--inflorescence", choices=("single", "raceme", "panicle", "cyme"),
+    parser.add_argument("--habit", choices=("monopodial", "sympodial", "climbing"), default="monopodial")
+    parser.add_argument("--inflorescence", choices=("single", "raceme", "spike", "panicle", "cyme"),
                         default="raceme")
     parser.add_argument("--out", type=Path, default=Path("plant_snapshot.npz"))
     return parser.parse_args()

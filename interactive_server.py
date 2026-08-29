@@ -1,12 +1,15 @@
 import json
-import logging
 import numpy as np
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from dataclasses import replace
+from pathlib import Path
 
 from flora.core.config import EngineConfig, MorphologyConfig, InflorescenceConfig, MechanicsConfig, NodeType
 from flora import create_default_engine
 from flora.biology.genetics import Genome, breed, extract_phenotype_pool
+
+#: Directory containing this server; used to locate the hand-authored UI template
+#: regardless of the process CWD (server is safe to launch from any directory).
+_BASE_DIR = Path(__file__).resolve().parent
 
 # Map phenotype pools to engine configs
 def phenotype_to_config(pheno_pool: dict, seed: int) -> EngineConfig:
@@ -171,8 +174,8 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
-            with open('interactive_ui.html', 'rb') as f:
-                self.wfile.write(f.read())
+            ui_path = _BASE_DIR / 'interactive_ui.html'
+            self.wfile.write(ui_path.read_bytes())
         else:
             self.send_response(404)
             self.end_headers()

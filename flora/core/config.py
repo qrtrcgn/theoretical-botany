@@ -32,7 +32,7 @@ LEAF = NodeType.LEAF
 STRUCTURAL_TYPES = frozenset({NodeType.INTERNODE, NodeType.APEX, NodeType.FLORAL_AXIS})
 
 _VALID_PHYLLOTAXIS = frozenset({"alternate", "opposite", "whorled"})
-_VALID_INFLORESCENCE = frozenset({"single", "raceme", "panicle", "cyme"})
+_VALID_INFLORESCENCE = frozenset({"single", "raceme", "panicle", "cyme", "spike"})
 _VALID_HABIT = frozenset({"monopodial", "sympodial", "climbing"})
 
 
