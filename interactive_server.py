@@ -1,3 +1,4 @@
+import argparse
 import json
 import numpy as np
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -109,6 +110,21 @@ _current_seed = None
 _current_genome_hash = None
 _current_pheno = None
 _current_strands = None
+
+def serialize_raw_snapshot(engine) -> dict:
+    snap = engine.snapshot()
+    out = {"n": int(snap["n"])}
+    for key, value in snap.items():
+        if key == "n":
+            continue
+        if isinstance(value, np.ndarray):
+            out[key] = value.tolist()
+        elif isinstance(value, np.generic):
+            out[key] = value.item()
+        else:
+            out[key] = value
+    return out
+
 
 def serialize_nodes(engine, pheno):
     snap = engine.snapshot()
@@ -285,6 +301,30 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'nodes': nodes_json, 'step': _current_engine.step_index, 'strands': strands, 'debug': debug}).encode('utf-8'))
+
+        elif self.path == '/api/raw_snapshot':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            req = json.loads(post_data.decode('utf-8')) if post_data else {}
+            steps = int(req.get('steps', 0))
+
+            if _current_engine is None:
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': 'No active simulation'}).encode('utf-8'))
+                return
+
+            for _ in range(max(0, steps)):
+                _current_engine.step(dt=1.0)
+
+            raw = serialize_raw_snapshot(_current_engine)
+            raw["step"] = _current_engine.step_index
+
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(raw).encode('utf-8'))
         
         elif self.path == '/api/prune':
             content_length = int(self.headers.get('Content-Length', 0))
@@ -369,13 +409,22 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'strands': child.strands}).encode('utf-8'))
             
-def run(server_class=HTTPServer, handler_class=InteractiveFloraHandler, port=8000):
+def run(server_class=HTTPServer, handler_class=InteractiveFloraHandler, host="", port=8000):
     server_class.allow_reuse_address = True
-    server_address = ('', port)
+    server_address = (host, port)
     httpd = server_class(server_address, handler_class)
-    print(f"Starting native Python botanical API on port {port}...")
+    bind_host = host if host else "0.0.0.0"
+    print(f"Starting native Python botanical API on {bind_host}:{port}...")
     print(f"Open http://localhost:{port} in your browser")
     httpd.serve_forever()
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the interactive Flora HTTP server.")
+    parser.add_argument("--host", default="", help="host/interface to bind (default all interfaces)")
+    parser.add_argument("--port", type=int, default=8000, help="HTTP port")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    run()
+    args = parse_args()
+    run(host=args.host, port=args.port)

@@ -34,7 +34,7 @@ A high-performance, headless mathematical simulation engine for procedural plant
 8. **Polyploid Genetics**:
    - `flora/biology/genetics.py`: `Genome` (polyploid allele strands) with rigorous meiosis — homolog segregation, crossover, unequal crossover (deletions/duplications) and non-disjunction (aneuploidy) — plus `breed()` crossing and phenotype-pool extraction used to configure plant morphology/flower traits.
 
-- **Interactive Web App**: `interactive_server.py` serves an isometric 2.5D canvas (`interactive_ui.html`) with live simulation, click-to-prune with Mitchison auxin re-routing, and genetic breeding via a JSON API on port 8000. A static offline export lives in `viewers/html_iso_viewer.py`.
+- **Interactive Web App**: `interactive_server.py` serves an isometric 2.5D canvas (`interactive_ui.html`) with live simulation, click-to-prune with Mitchison auxin re-routing, genetic breeding, and `/api/raw_snapshot` for full raw state export via JSON.
 
 ---
 
@@ -49,10 +49,22 @@ flora/
 └── factory.py    # Composition root wiring the default botanical pipeline
 viewers/          # Decoupled visualization clients (Matplotlib 3D, HTML isometric)
 examples/         # Headless batch run
-scripts/          # Dev/demo/inspection utilities (seasons demo, snapshot inspection, dev server, API smoke test)
+scripts/          # Optional demos/utilities
 interactive_server.py  # JSON API + serves the interactive 2.5D web app
 interactive_ui.html   # Hand-authored isometric plant canvas (served by interactive_server.py)
 ```
+
+## CLI Workflows
+
+- **Headless (all parameters via CLI)**:
+  - Full config JSON: `python examples/run_headless.py --config config.json`
+  - Single override: `python examples/run_headless.py --set mechanics.gravity=1.62 --set morphology.max_nodes_soft=50000`
+  - Raw full-state JSON export: `python examples/run_headless.py --raw-json plant_snapshot.json`
+
+- **Interactive server + integrated viewer**:
+  - `python interactive_server.py --port 8000`
+  - UI: `http://localhost:8000`
+  - Raw snapshot API: `POST /api/raw_snapshot` (optional body: `{"steps": 10}`)
 
 ---
 
