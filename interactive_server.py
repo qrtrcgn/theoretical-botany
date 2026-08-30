@@ -11,6 +11,64 @@ from flora.biology.genetics import Genome, breed, extract_phenotype_pool
 #: regardless of the process CWD (server is safe to launch from any directory).
 _BASE_DIR = Path(__file__).resolve().parent
 
+# Botanical schema for debug decoding (mirrors botanical_schema.json)
+_BOTANICAL_SCHEMA = {
+    "habitus": {
+        "wuchsform": ["aufrecht", "kriechend", "kletternd", "hängend", "polsterförmig", "rosettenbildend"],
+        "lebensform": ["annuell", "bienne", "perenn", "gehölz", "kraut"],
+    },
+    "sprossachse": {
+        "querschnitt": ["rund", "vierkantig", "gefurcht", "gerieft"],
+        "oberflaeche": ["glatt", "behaart", "stachelig", "bereift"],
+    },
+    "blaetter": {
+        "stellung": ["wechselständig", "gegenständig", "quirlständig"],
+        "form": ["eiförmig", "lanzettlich", "herzförmig", "spatelförmig", "fiederspaltig"],
+        "rand": ["ganzrandig", "gezähnt", "gesägt", "gelappt"],
+    },
+    "blueten": {
+        "bluetenstand": ["traube", "aehre", "rispe", "dolde", "koepfchen", "einzelbluete"],
+        "symmetrie": ["radiaersymmetrisch", "zygomorph", "asymmetrisch"],
+    },
+}
+
+# Locus -> schema mapping (allele % len(options))
+_LOCUS_MAP = [
+    ("habitus.wuchsform", "habitus", "wuchsform"),
+    ("habitus.lebensform", "habitus", "lebensform"),
+    ("sprossachse.querschnitt", "sprossachse", "querschnitt"),
+    ("sprossachse.oberflaeche", "sprossachse", "oberflaeche"),
+    ("blaetter.stellung", "blaetter", "stellung"),
+    ("blaetter.form", "blaetter", "form"),
+    ("blaetter.rand", "blaetter", "rand"),
+    ("blueten.bluetenstand", "blueten", "bluetenstand"),
+    ("blueten.symmetrie", "blueten", "symmetrie"),
+    ("farbe/symmetrie-mod", None, None),  # Locus 9: visuelle Modifikation (Farbe/Petals)
+]
+
+
+def _build_debug_info(strands: list, pheno: dict) -> dict:
+    """Build debug payload for the frontend gene inspector."""
+    pool_serialized = {str(k): v for k, v in pheno.items()}
+    traits = []
+    for locus, (label, cat, key) in enumerate(_LOCUS_MAP):
+        alleles = pheno.get(locus, [])
+        if cat and key:
+            options = _BOTANICAL_SCHEMA[cat][key]
+            # Use first allele as representative (sorted pool)
+            rep = alleles[0] if alleles else 0
+            decoded = options[rep % len(options)]
+        else:
+            decoded = f"alleles={alleles}"
+        traits.append({"locus": locus, "label": label, "alleles": alleles, "decoded": decoded})
+    # Extra loci beyond schema
+    max_locus = max(pheno.keys(), default=-1)
+    for locus in range(len(_LOCUS_MAP), max_locus + 1):
+        alleles = pheno.get(locus, [])
+        traits.append({"locus": locus, "label": f"locus_{locus}", "alleles": alleles, "decoded": f"alleles={alleles}"})
+    return {"strands": strands, "ploidy": len(strands), "pool": pool_serialized, "traits": traits}
+
+
 # Map phenotype pools to engine configs
 def phenotype_to_config(pheno_pool: dict, seed: int) -> EngineConfig:
     def get_allele(locus):
@@ -50,6 +108,7 @@ _current_engine = None
 _current_seed = None
 _current_genome_hash = None
 _current_pheno = None
+_current_strands = None
 
 def serialize_nodes(engine, pheno):
     snap = engine.snapshot()
@@ -181,7 +240,7 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_POST(self):
-        global _current_engine, _current_seed, _current_genome_hash, _current_pheno
+        global _current_engine, _current_seed, _current_genome_hash, _current_pheno, _current_strands
         if self.path == '/api/simulate':
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
@@ -203,6 +262,7 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
             genome = Genome(strands)
             pheno = extract_phenotype_pool(genome)
             _current_pheno = pheno
+            _current_strands = [s[:] for s in strands]
             genome_hash = hash(str(strands))
             
             if _current_engine is None or reset or _current_seed != seed or _current_genome_hash != genome_hash:
@@ -219,11 +279,12 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
                     _current_engine.step(dt=1.0)
                 
             nodes_json = serialize_nodes(_current_engine, _current_pheno)
+            debug = _build_debug_info(strands, _current_pheno)
             
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({'nodes': nodes_json, 'step': _current_engine.step_index}).encode('utf-8'))
+            self.wfile.write(json.dumps({'nodes': nodes_json, 'step': _current_engine.step_index, 'strands': strands, 'debug': debug}).encode('utf-8'))
         
         elif self.path == '/api/prune':
             content_length = int(self.headers.get('Content-Length', 0))
@@ -281,6 +342,7 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
                 _current_engine.ctx.cache['floral_consumed'].discard(cut_id)
                 
             nodes_json = serialize_nodes(_current_engine, _current_pheno)
+            debug = _build_debug_info(_current_strands or [], _current_pheno or {})
             
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
@@ -290,6 +352,7 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
                 'pruned_id': cut_id,
                 'killed_count': len(descendants),
                 'nodes': nodes_json,
+                'debug': debug,
             }).encode('utf-8'))
             
         elif self.path == '/api/breed':

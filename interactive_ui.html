@@ -16,6 +16,15 @@
   #greenhouse { border-top: 1px dashed #475569; padding-top: 15px; margin-top: 15px; }
   .slot { font-size: 11px; padding: 8px; background: rgba(0,0,0,0.4); border-radius: 4px; margin-bottom: 8px; border: 1px solid #1e293b; cursor:pointer;}
   .slot.selected { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+  #debug-panel { position: absolute; top: 20px; right: 20px; background: rgba(15,23,42,0.92); padding: 14px; border-radius: 8px; border: 1px solid #334155; width: 360px; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); font-size: 11px; line-height: 1.5; }
+  #debug-panel h3 { margin: 0 0 8px; font-size: 12px; color: #38bdf8; letter-spacing: 0.04em; text-transform: uppercase; }
+  #debug-panel h4 { margin: 12px 0 6px; font-size: 11px; color: #fbbf24; }
+  .dbg-meta { color: #94a3b8; margin-bottom: 8px; }
+  .dbg-strand { font-family: monospace; background: rgba(0,0,0,0.35); padding: 4px 6px; border-radius: 4px; margin-bottom: 4px; border-left: 3px solid #10b981; word-break: break-all; }
+  .dbg-trait { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(51,65,85,0.5); }
+  .dbg-trait b { color: #e2e8f0; }
+  .dbg-trait span { color: #38bdf8; }
+  .dbg-pool { color: #64748b; font-size: 10px; }
 </style>
 </head>
 <body>
@@ -31,6 +40,10 @@
   <div id="prune-help">
       ✂️ <b>Gartenschere:</b> Klicke auf einen Ast, um ihn abzuschneiden. Aus der Schnittstelle treiben neue Knospen aus!
   </div>
+  <div style="display:flex; gap:8px; margin-top:10px;">
+      <button id="btn-pot" style="background:#a16207; flex:1; font-size:11px; padding:8px;">🪴 Topf</button>
+      <button id="btn-schale" style="background:#44403c; flex:1; font-size:11px; padding:8px; opacity:0.6;">🥣 Schale</button>
+  </div>
 
   <div id="greenhouse">
       <h3 style="margin: 0 0 10px; font-size: 13px;">Samenbank</h3>
@@ -39,6 +52,15 @@
       <button id="btn-breed" style="background:#ec4899; display:none; margin-top:10px;">🧬 Kreuzen!</button>
   </div>
   <div id="status">Warte auf Berechnungen...</div>
+</div>
+<div id="debug-panel">
+  <h3>🧬 Genom-Debug — alle Genwerte</h3>
+  <div id="dbg-meta" class="dbg-meta">Lade...</div>
+  <h4>Stränge (polyploid)</h4>
+  <div id="dbg-strands"></div>
+  <h4>Merkmale nach botanical_schema.json</h4>
+  <div id="dbg-traits"></div>
+  <div id="dbg-pool" class="dbg-pool" style="margin-top:8px;"></div>
 </div>
 
 <script>
@@ -65,6 +87,89 @@
       const isoX = (x - y) * 0.866025; 
       const isoY = (x + y) * 0.5 - z;
       return { x: offsetX + isoX * scale, y: offsetY + isoY * scale };
+  }
+
+  // Topf/Schale — isometrischer Pflanzkübel unterm Spross
+  // Passt sich leicht dem Habitus an (wird im Debug schon dekodiert), default: schöner Terrakotta-Topf
+  let potStyle = 'topf'; // 'topf' | 'schale'
+  function drawPot() {
+      const topCenter = toIso(0, 0, 0);
+      // Maße skalieren mit Zoom, aber clampen damit Topf nie winzig/riesig wird
+      const s = Math.max(0.6, Math.min(1.6, scale));
+      const isSchale = potStyle === 'schale';
+      const topRx = (isSchale ? 32 : 24) * s;
+      const topRy = (isSchale ? 14 : 11) * s;
+      const botRx = (isSchale ? 28 : 18) * s;
+      const botRy = (isSchale ? 12 : 8) * s;
+      const h = (isSchale ? 14 : 22) * s;
+      const botCenter = { x: topCenter.x, y: topCenter.y + h };
+
+      // Schatten auf dem Boden
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.beginPath();
+      ctx.ellipse(botCenter.x, botCenter.y + 4, botRx + 6, botRy + 3, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+
+      // Seitenwand — vordere Hälfte des Topfs
+      const leftTopX = topCenter.x - topRx;
+      const rightTopX = topCenter.x + topRx;
+      const leftBotX = botCenter.x - botRx;
+      const rightBotX = botCenter.x + botRx;
+      // Körper
+      ctx.fillStyle = isSchale ? '#9a7b5a' : '#b45a3c'; // Schale: heller Ton, Topf: Terrakotta
+      ctx.beginPath();
+      ctx.moveTo(leftTopX, topCenter.y);
+      ctx.lineTo(leftBotX, botCenter.y);
+      // bottom ellipse front half
+      ctx.ellipse(botCenter.x, botCenter.y, botRx, botRy, 0, Math.PI, 0, false);
+      ctx.lineTo(rightTopX, topCenter.y);
+      // top ellipse front half (nach innen)
+      ctx.ellipse(topCenter.x, topCenter.y, topRx, topRy, 0, 0, Math.PI, false);
+      ctx.closePath();
+      ctx.fill();
+      // Lichtkante links
+      ctx.fillStyle = isSchale ? '#c4a484' : '#d67a5a';
+      ctx.beginPath();
+      ctx.moveTo(leftTopX, topCenter.y);
+      ctx.lineTo(leftBotX, botCenter.y);
+      ctx.ellipse(botCenter.x, botCenter.y, botRx, botRy, 0, Math.PI, Math.PI*1.35, false);
+      ctx.lineTo(topCenter.x - topRx*0.35, topCenter.y + topRy*0.3);
+      ctx.ellipse(topCenter.x, topCenter.y, topRx, topRy, 0, Math.PI, Math.PI*1.35, false);
+      ctx.closePath();
+      ctx.fill();
+      // Schatten rechts
+      ctx.fillStyle = isSchale ? '#6b4f3a' : '#7a2e16';
+      ctx.beginPath();
+      ctx.moveTo(rightTopX, topCenter.y);
+      ctx.lineTo(rightBotX, botCenter.y);
+      ctx.ellipse(botCenter.x, botCenter.y, botRx, botRy, 0, Math.PI*1.65, Math.PI*2, false);
+      ctx.lineTo(topCenter.x + topRx*0.35, topCenter.y + topRy*0.3);
+      ctx.ellipse(topCenter.x, topCenter.y, topRx, topRy, 0, Math.PI*1.65, Math.PI*2, false);
+      ctx.closePath();
+      ctx.fill();
+
+      // Topf-Rand (Wulst)
+      ctx.fillStyle = isSchale ? '#b8936f' : '#c96a45';
+      ctx.beginPath();
+      ctx.ellipse(topCenter.x, topCenter.y, topRx + 3, topRy + 2.5, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Rand-Innen
+      ctx.fillStyle = isSchale ? '#a67c52' : '#8a3a1f';
+      ctx.beginPath();
+      ctx.ellipse(topCenter.x, topCenter.y, topRx - 1, topRy - 1, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Erde
+      ctx.fillStyle = '#3a2a1a';
+      ctx.beginPath();
+      ctx.ellipse(topCenter.x, topCenter.y, topRx - 4, topRy - 2.5, 0, 0, Math.PI*2);
+      ctx.fill();
+      // kleiner Erd-Glanz
+      ctx.fillStyle = 'rgba(92,64,32,0.7)';
+      ctx.beginPath();
+      ctx.ellipse(topCenter.x - topRx*0.25, topCenter.y - topRy*0.15, topRx*0.3, topRy*0.25, 0, 0, Math.PI*2);
+      ctx.fill();
   }
 
   function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
@@ -117,6 +222,8 @@
           ctx.moveTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
       }
       ctx.stroke();
+
+      drawPot();
 
       plantNodes.sort((a,b) => (b.pos.x + b.pos.y) - (a.pos.x + a.pos.y));
       plantNodes.forEach(n => {
@@ -295,6 +402,7 @@
           if (data.nodes) {
               plantNodes = data.nodes;
           }
+          if(data.debug) renderDebug(data.debug);
           hoveredNode = null;
           hoveredPoint = null;
           canvas.style.cursor = 'default';
@@ -316,6 +424,8 @@
           });
           const data = await res.json();
           plantNodes = data.nodes;
+          if(data.strands) currentStrands = data.strands;
+          if(data.debug) renderDebug(data.debug); else renderDebug(buildClientDebug(currentStrands));
           currentSteps = data.step !== undefined ? data.step : (isReset ? steps : currentSteps + steps);
           statusEl.innerText = `[Step ${currentSteps}] ${plantNodes.length} Knoten aktiv.`;
           
@@ -340,9 +450,19 @@
   document.getElementById('btn-reset').onclick = () => {
       currentSeed = Math.floor(Math.random()*1000000);
       currentStrands = randomPolyploid();
+      renderDebug(buildClientDebug(currentStrands));
       currentSteps = 0;
       simulateGrowth(15, true);
   };
+  function updatePotButtons(){
+      const bTopf = document.getElementById('btn-pot');
+      const bSchale = document.getElementById('btn-schale');
+      if(potStyle==='topf'){ bTopf.style.opacity='1'; bTopf.style.border='1px solid #fbbf24'; bSchale.style.opacity='0.6'; bSchale.style.border='none'; }
+      else { bSchale.style.opacity='1'; bSchale.style.border='1px solid #fbbf24'; bTopf.style.opacity='0.6'; bTopf.style.border='none'; }
+  }
+  document.getElementById('btn-pot').onclick = () => { potStyle='topf'; window._potManuallyChosen=true; updatePotButtons(); renderCanvas(); };
+  document.getElementById('btn-schale').onclick = () => { potStyle='schale'; window._potManuallyChosen=true; updatePotButtons(); renderCanvas(); };
+  updatePotButtons();
   
   function renderGreenhouse() {
       const slots = document.getElementById('slots-container');
@@ -371,12 +491,70 @@
           });
           const data = await res.json();
           currentStrands = data.strands;
+          renderDebug(buildClientDebug(currentStrands));
           currentSeed = Math.floor(Math.random()*1000000);
           selectedSlots = [];
           renderGreenhouse();
           simulateGrowth(15, true);
       }
   };
+
+  const BOTANICAL_SCHEMA = {
+    habitus: { wuchsform: ["aufrecht","kriechend","kletternd","hängend","polsterförmig","rosettenbildend"], lebensform: ["annuell","bienne","perenn","gehölz","kraut"] },
+    sprossachse: { querschnitt: ["rund","vierkantig","gefurcht","gerieft"], oberflaeche: ["glatt","behaart","stachelig","bereift"] },
+    blaetter: { stellung: ["wechselständig","gegenständig","quirlständig"], form: ["eiförmig","lanzettlich","herzförmig","spatelförmig","fiederspaltig"], rand: ["ganzrandig","gezähnt","gesägt","gelappt"] },
+    blueten: { bluetenstand: ["traube","aehre","rispe","dolde","koepfchen","einzelbluete"], symmetrie: ["radiaersymmetrisch","zygomorph","asymmetrisch"] }
+  };
+  const LOCUS_LABELS = ["habitus.wuchsform","habitus.lebensform","sprossachse.querschnitt","sprossachse.oberflaeche","blaetter.stellung","blaetter.form","blaetter.rand","blueten.bluetenstand","blueten.symmetrie","farbe/symmetrie-mod"];
+
+  function buildClientDebug(strands){
+    const maxLen = Math.max(...strands.map(s=>s.length), 0);
+    const pool = {};
+    for(let l=0;l<maxLen;l++) pool[l]=[];
+    strands.forEach(s=> s.forEach((a,l)=> pool[l].push(a)));
+    Object.keys(pool).forEach(k=> pool[k].sort((a,b)=>a-b));
+    const traits=[];
+    for(let l=0;l<LOCUS_LABELS.length;l++){
+      const alleles = pool[l]||[0];
+      const label = LOCUS_LABELS[l];
+      let decoded='';
+      if(l===0) decoded = BOTANICAL_SCHEMA.habitus.wuchsform[(alleles[0]||0)%6];
+      else if(l===1) decoded = BOTANICAL_SCHEMA.habitus.lebensform[(alleles[0]||0)%5];
+      else if(l===2) decoded = BOTANICAL_SCHEMA.sprossachse.querschnitt[(alleles[0]||0)%4];
+      else if(l===3) decoded = BOTANICAL_SCHEMA.sprossachse.oberflaeche[(alleles[0]||0)%4];
+      else if(l===4) decoded = BOTANICAL_SCHEMA.blaetter.stellung[(alleles[0]||0)%3];
+      else if(l===5) decoded = BOTANICAL_SCHEMA.blaetter.form[(alleles[0]||0)%5];
+      else if(l===6) decoded = BOTANICAL_SCHEMA.blaetter.rand[(alleles[0]||0)%4];
+      else if(l===7) decoded = BOTANICAL_SCHEMA.blueten.bluetenstand[(alleles[0]||0)%6];
+      else if(l===8) decoded = BOTANICAL_SCHEMA.blueten.symmetrie[(alleles[0]||0)%3];
+      else decoded = `alleles=${alleles.join(',')}`;
+      traits.push({locus:l, label, alleles, decoded});
+    }
+    return {strands, ploidy: strands.length, pool, traits};
+  }
+
+  function renderDebug(debug){
+    if(!debug) { debug = buildClientDebug(currentStrands); }
+    const meta = document.getElementById('dbg-meta');
+    const sEl = document.getElementById('dbg-strands');
+    const tEl = document.getElementById('dbg-traits');
+    const pEl = document.getElementById('dbg-pool');
+    meta.innerText = `Ploidie: ${debug.ploidy}×  |  Loci: ${Object.keys(debug.pool||{}).length}  |  Seed: ${currentSeed}`;
+    sEl.innerHTML = (debug.strands||[]).map((s,i)=> `<div class="dbg-strand">Strang ${i+1}: [${s.join(', ')}]</div>`).join('');
+    tEl.innerHTML = (debug.traits||[]).map(t=> `<div class="dbg-trait"><b>${t.locus}: ${t.label}</b><span>${t.decoded} <span class="dbg-pool">[${(t.alleles||[]).join(',')}]</span></span></div>`).join('');
+    pEl.innerText = `Pool (sortiert je Locus): ${JSON.stringify(debug.pool)}`;
+    // Habitus-Kopplung: Wuchsform steuert Topf/Schale automatisch
+    const wuchs = (debug.traits && debug.traits[0] && debug.traits[0].decoded) || '';
+    const schaleFormen = ['polsterförmig','rosettenbildend','kriechend','hängend'];
+    const autoStyle = schaleFormen.includes(wuchs) ? 'schale' : 'topf';
+    if(potStyle !== autoStyle){
+        potStyle = autoStyle;
+        if(typeof updatePotButtons === 'function') updatePotButtons();
+    }
+  }
+
+  // initial render before server reply
+  renderDebug(null);
 
   resize();
   simulateGrowth(15, true);
