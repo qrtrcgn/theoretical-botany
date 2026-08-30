@@ -45,10 +45,29 @@ def seasonal_dieback_step(ctx: SimulationContext, dt: float = 1.0) -> None:
         # Kill tips (APEX, FLORAL_AXIS) that haven't lignified yet (w < 0.2)
         kill_mask_herb = ((types == int(APEX)) | (types == int(FLORAL_AXIS))) & (woodiness < 0.2) & (state.depth[live] > 0)
         
-        total_kill = np.zeros(n, dtype=bool)
-        total_kill[live[kill_mask_flowers | kill_mask_herb]] = True
-        
-        state.kill(total_kill)
+        dead_roots = live[kill_mask_flowers | kill_mask_herb]
+        if dead_roots.size > 0:
+            parent_arr = state.parent[:n]
+            to_kill = set(dead_roots.tolist())
+            frontier = list(to_kill)
+            while frontier:
+                curr = frontier.pop()
+                children = np.flatnonzero(parent_arr == curr)
+                for c in children:
+                    if int(c) not in to_kill:
+                        to_kill.add(int(c))
+                        frontier.append(int(c))
+            total_kill = np.zeros(n, dtype=bool)
+            dead_arr = np.array(list(to_kill), dtype=np.int64)
+            total_kill[dead_arr] = True
+            state.auxin[dead_arr] = 0.0
+            state.vigor[dead_arr] = 0.0
+            state.structural_mass[dead_arr] = 0.0
+            state.kill(total_kill)
+            if 'floral_consumed' in ctx.cache:
+                ctx.cache['floral_consumed'].difference_update(to_kill)
+        else:
+            return
         # Note: We do NOT call state.compact() automatically to avoid thrashing.
         # The engine will just skip dead nodes in future passes.
 
@@ -168,9 +187,28 @@ def light_occlusion_pass(ctx: SimulationContext, dt: float = 1.0) -> None:
     # A node is shadowed if its column has high density AND it is at least 20cm below the top canopy
     is_shadowed = (col_density[vuln_flat] > shadow_threshold) & (vuln_z < max_z_per_col[vuln_flat] - 0.2)
     
-    # Kill the shadowed nodes
+    # Kill the shadowed nodes — and their entire subtrees (echter Astfall)
     dead_nodes = vulnerable_nodes[is_shadowed]
     if dead_nodes.size > 0:
-        kill_mask[dead_nodes] = True
+        parent_arr = state.parent[:n]
+        to_kill = set(dead_nodes.tolist())
+        frontier = list(to_kill)
+        while frontier:
+            curr = frontier.pop()
+            children = np.flatnonzero(parent_arr == curr)
+            for c in children:
+                if int(c) not in to_kill:
+                    to_kill.add(int(c))
+                    frontier.append(int(c))
+        kill_mask = np.zeros(n, dtype=bool)
+        dead_arr = np.array(list(to_kill), dtype=np.int64)
+        kill_mask[dead_arr] = True
+        # Ressourcen auf toten Ästen löschen, damit kein Phantom-Vigor bleibt
+        state.auxin[dead_arr] = 0.0
+        state.vigor[dead_arr] = 0.0
+        state.structural_mass[dead_arr] = 0.0
         state.kill(kill_mask)
+        # Cache aufräumen falls vorhanden
+        if 'floral_consumed' in ctx.cache:
+            ctx.cache['floral_consumed'].difference_update(to_kill)
 
