@@ -325,12 +325,12 @@
               rendered++;
 
           } else if (n.type === 'flower') {
-              const geometry = new THREE.SphereGeometry(Math.max(0.15, r * 1.2), 8, 8);
+              const geometry = new THREE.SphereGeometry(Math.max(0.02, r * morph.flower_radius_ratio * 2), 8, 8);
               const material = new THREE.MeshStandardMaterial({ color: flowerColor, emissive: 0x551111, roughness: 0.3 });
               const sphere = new THREE.Mesh(geometry, material);
               sphere.position.copy(p1).addScaledVector(dirN, Math.max(L, 0.1));
               sphere.castShadow = true;
-              sphere.scale.set(0.03, 0.03, 0.03);
+              sphere.scale.set(morph.flower_radius_ratio * 0.15, morph.flower_radius_ratio * 0.15, morph.flower_radius_ratio * 0.15);
               sphere.userData = { nodeId: n.id, type: 'tip', born: born, grown: false, p1: p1.clone(), dir: dirN.clone(), L: Math.max(L, 0.1) };
               plantGroup.add(sphere);
               rendered++;
@@ -339,17 +339,17 @@
               const material = new THREE.MeshStandardMaterial({ color: n.type === 'apex' ? apexColor : budColor, roughness: 0.5 });
               const sphere = new THREE.Mesh(geometry, material);
               sphere.position.copy(p1);
-              sphere.scale.set(0.03, 0.03, 0.03);
+              sphere.scale.set(morph.flower_radius_ratio * 0.15, morph.flower_radius_ratio * 0.15, morph.flower_radius_ratio * 0.15);
               sphere.userData = { nodeId: n.id, type: 'static', born: born, grown: false };
               plantGroup.add(sphere);
               rendered++;
           } else if (n.type === 'leaf') {
-              const geometry = new THREE.SphereGeometry(0.18, 6, 6);
-              geometry.scale(1.0, 0.4, 1.6);
+              const geometry = new THREE.SphereGeometry(0.12 * morph.leaf_length_ratio, 6, 6);
+              geometry.scale(1.0, 1.5 * morph.leaf_length_ratio, 0.8);
               const material = new THREE.MeshStandardMaterial({ color: leafColor, roughness: 0.7 });
               const leaf = new THREE.Mesh(geometry, material);
               leaf.position.copy(p1).addScaledVector(dirN, Math.max(L, 0.3));
-              leaf.scale.set(0.03, 0.03, 0.03);
+              leaf.scale.set(morph.leaf_length_ratio * 0.03, morph.leaf_length_ratio * 0.03, morph.leaf_length_ratio * 0.03);
               leaf.userData = { nodeId: n.id, type: 'tip', born: born, grown: false, p1: p1.clone(), dir: dirN.clone(), L: Math.max(L, 0.3) };
               plantGroup.add(leaf);
               rendered++;

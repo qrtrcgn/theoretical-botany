@@ -51,6 +51,10 @@ class MorphologyConfig:
     flower_mass: float = 0.005                   # kg per FLOWER node
     max_nodes_soft: int = 20000                  # soft budget; passes stop spawning beyond
 
+    # Relative organ scaling parameters (fractions of internode length / organScale)
+    leaf_length_ratio: float = 0.9               # leaf length as fraction of organScale * internode_length
+    flower_radius_ratio: float = 0.2             # flower radius as fraction of internode radius
+
     def __post_init__(self) -> None:
         if self.phyllotaxis_mode not in _VALID_PHYLLOTAXIS:
             raise ValueError(f"phyllotaxis_mode must be one of {_VALID_PHYLLOTAXIS}")
@@ -62,6 +66,10 @@ class MorphologyConfig:
             raise ValueError("tip_radius_min must be positive")
         if self.max_nodes_soft < 1:
             raise ValueError("max_nodes_soft must be >= 1")
+        if not 0.0 < self.leaf_length_ratio <= 1.0:
+            raise ValueError("leaf_length_ratio must lie in (0, 1]")
+        if not 0.0 < self.flower_radius_ratio <= 1.0:
+            raise ValueError("flower_radius_ratio must lie in (0, 1]")
 
 
 @dataclass(frozen=True)
