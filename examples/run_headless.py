@@ -50,6 +50,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--out", type=Path, default=Path("plant_snapshot.npz"))
     parser.add_argument("--raw-json", type=Path, default=None, help="optional full JSON snapshot output")
+    parser.add_argument("--export-obj", type=Path, default=None, help="optional Wavefront .OBJ 3D export path")
+    parser.add_argument("--export-gltf", type=Path, default=None, help="optional glTF 2.0 3D export path")
     return parser.parse_args()
 
 
@@ -160,6 +162,16 @@ def main() -> None:
             encoding="utf-8",
         )
         print(f"raw json -> {args.raw_json}")
+
+    if args.export_obj is not None:
+        from flora.io.exporter import export_obj
+        export_obj(engine.state, out_path=args.export_obj)
+        print(f"export obj -> {args.export_obj}")
+
+    if args.export_gltf is not None:
+        from flora.io.exporter import export_gltf
+        export_gltf(engine.state, out_path=args.export_gltf)
+        print(f"export gltf -> {args.export_gltf}")
 
 
 if __name__ == "__main__":

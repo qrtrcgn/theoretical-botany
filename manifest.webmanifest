@@ -1,0 +1,12 @@
+{
+  "name": "Flora Zen Garden",
+  "short_name": "Flora",
+  "description": "Grow and prune a botanical 3D zen garden.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "icons": [
+    { "src": "/flora-icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

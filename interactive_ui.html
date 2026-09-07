@@ -2,392 +2,392 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Flora Engine - Interaktive Python API</title>
+<title>Flora Engine - 3D WebGL & Startup Menu Launcher</title>
 <style>
-  body { margin: 0; background: #0f172a; color: white; font-family: monospace; overflow: hidden; }
-  canvas { display: block; width: 100vw; height: 100vh; cursor: default; }
-  #ui { position: absolute; top: 20px; left: 20px; background: rgba(15, 23, 42, 0.88); padding: 20px; border-radius: 8px; border: 1px solid #334155; width: 320px; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-  h2 { margin: 0 0 10px; font-size: 16px; color: #10b981; }
-  button { width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+  :root {
+    --bg: #090d16;
+    --panel: rgba(15, 23, 42, 0.92);
+    --ink: #f8fafc;
+    --accent: #10b981;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-monospace, monospace; overflow: hidden; }
+  
+  /* Startup Launcher Modal */
+  #startup-modal {
+    position: fixed; inset: 0; background: rgba(5, 7, 12, 0.95); z-index: 1000;
+    display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px);
+    transition: opacity 0.4s ease;
+  }
+  .modal-card {
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    border: 1px solid #4f46e5; border-radius: 12px; padding: 30px; width: 480px; max-width: 90vw;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+  }
+  .modal-card h1 { margin: 0 0 5px; font-size: 22px; color: #38bdf8; display: flex; align-items: center; gap: 10px; }
+  .modal-card p { margin: 0 0 20px; color: #94a3b8; font-size: 12px; }
+  .form-group { margin-bottom: 15px; }
+  .form-group label { display: block; font-size: 11px; text-transform: uppercase; color: #cbd5e1; margin-bottom: 6px; letter-spacing: 0.05em; }
+  .form-group select, .form-group input {
+    width: 100%; padding: 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border);
+    color: white; border-radius: 6px; font-family: ui-monospace, monospace; font-size: 13px;
+  }
+  .form-group select:focus, .form-group input:focus { outline: none; border-color: #38bdf8; box-shadow: 0 0 8px rgba(56,189,248,0.3); }
+  
+  .btn-launch {
+    width: 100%; padding: 14px; background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer;
+    box-shadow: 0 4px 15px rgba(16,185,129,0.4); transition: transform 0.1s; margin-top: 10px;
+  }
+  .btn-launch:hover { transform: translateY(-2px); background: linear-gradient(135deg, #34d399 0%, #10b981 100%); }
+
+  .btn-randomize {
+    width: 100%; padding: 10px; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+    color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;
+    margin-top: 8px; transition: background 0.2s;
+  }
+  .btn-randomize:hover { background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%); }
+
+  /* Connection error overlay */
+  #connection-error {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 2000;
+    display: none; align-items: center; justify-content: center; text-align: center; padding: 20px;
+  }
+  .error-card {
+    background: #1e1b4b; border: 1px solid #ef4444; border-radius: 12px; padding: 30px; max-width: 500px;
+  }
+  .error-card h2 { color: #f87171; margin-top: 0; }
+  .error-card code { background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; color: #38bdf8; display: inline-block; margin: 10px 0; }
+
+  /* Main Viewport & UI Rail */
+  #viewport { width: 100vw; height: 100vh; display: block; }
+  #ui {
+    position: absolute; top: 20px; left: 20px; background: var(--panel); padding: 20px;
+    border-radius: 10px; border: 1px solid var(--border); width: 340px; max-height: 92vh;
+    overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 10;
+  }
+  h2 { margin: 0 0 12px; font-size: 16px; color: #38bdf8; display: flex; justify-content: space-between; align-items: center; }
+  button { width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-bottom: 8px; font-family: ui-monospace, monospace; font-size: 12px; }
   button:hover { background: #1d4ed8; }
-  .btn-row { display: flex; gap: 10px; margin-bottom: 10px; }
-  #status { font-size: 11px; color: #fbbf24; margin-top: 10px; line-height: 1.4; }
-  #prune-help { font-size: 11px; color: #94a3b8; background: rgba(30, 41, 59, 0.6); padding: 8px; border-radius: 4px; border-left: 3px solid #ef4444; margin-top: 10px; }
+  .btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  #status { font-size: 11px; color: #fbbf24; margin-top: 10px; line-height: 1.4; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; border: 1px solid #1e293b; }
+  #prune-help { font-size: 11px; color: #94a3b8; background: rgba(30, 41, 59, 0.6); padding: 8px; border-radius: 4px; border-left: 3px solid #ef4444; margin-top: 10px; line-height: 1.4; }
+  
   #greenhouse { border-top: 1px dashed #475569; padding-top: 15px; margin-top: 15px; }
-  .slot { font-size: 11px; padding: 8px; background: rgba(0,0,0,0.4); border-radius: 4px; margin-bottom: 8px; border: 1px solid #1e293b; cursor:pointer;}
-  .slot.selected { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
-  #debug-panel { position: absolute; top: 20px; right: 20px; background: rgba(15,23,42,0.92); padding: 14px; border-radius: 8px; border: 1px solid #334155; width: 360px; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); font-size: 11px; line-height: 1.5; }
-  #debug-panel h3 { margin: 0 0 8px; font-size: 12px; color: #38bdf8; letter-spacing: 0.04em; text-transform: uppercase; }
-  #debug-panel h4 { margin: 12px 0 6px; font-size: 11px; color: #fbbf24; }
-  .dbg-meta { color: #94a3b8; margin-bottom: 8px; }
-  .dbg-strand { font-family: monospace; background: rgba(0,0,0,0.35); padding: 4px 6px; border-radius: 4px; margin-bottom: 4px; border-left: 3px solid #10b981; word-break: break-all; }
-  .dbg-trait { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(51,65,85,0.5); }
-  .dbg-trait b { color: #e2e8f0; }
-  .dbg-trait span { color: #38bdf8; }
-  .dbg-pool { color: #64748b; font-size: 10px; }
+  .slot { font-size: 11px; padding: 8px; background: rgba(0,0,0,0.4); border-radius: 4px; margin-bottom: 6px; border: 1px solid #1e293b; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .slot:hover { border-color: #475569; }
+  .slot.selected { border-color: #10b981; background: rgba(16, 185, 129, 0.15); }
+
+  #debug-panel {
+    position: absolute; top: 20px; right: 20px; background: var(--panel); padding: 15px;
+    border-radius: 10px; border: 1px solid var(--border); width: 340px; max-height: 92vh;
+    overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.6); font-size: 11px; line-height: 1.5; z-index: 10;
+  }
+  #debug-panel h3 { margin: 0 0 8px; font-size: 12px; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em; }
+  #debug-panel h4 { margin: 10px 0 4px; font-size: 11px; color: #fbbf24; }
+  .dbg-strand { font-family: monospace; background: rgba(0,0,0,0.4); padding: 4px 6px; border-radius: 4px; margin-bottom: 3px; border-left: 3px solid #10b981; word-break: break-all; }
+  .dbg-trait { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(51,65,85,0.4); }
+  .dbg-trait b { color: #e2e8f0; } .dbg-trait span { color: #38bdf8; }
+  
+  .export-row { display: flex; gap: 8px; margin-top: 10px; }
+  .export-row button { background: #7c3aed; }
+  .export-row button:hover { background: #6d28d9; }
 </style>
+
+<!-- Three.js & OrbitControls via CDN -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#090d16">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+  if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  }
+</script>
 </head>
 <body>
-<canvas id="iso-canvas"></canvas>
+
+<!-- CONNECTION ERROR OVERLAY -->
+<div id="connection-error">
+  <div class="error-card">
+    <h2>⚠️ Python Server Not Running</h2>
+    <p>You opened the HTML file directly via <code>file://</code> protocol. The browser cannot fetch simulation data without the backend server running.</p>
+    <p>Please start the server in your terminal:</p>
+    <code>python interactive_server.py --port 8000</code>
+    <br><br>
+    <button class="btn-launch" onclick="location.reload()">🔄 Retry Connection</button>
+  </div>
+</div>
+
+<!-- STARTUP MENU GUI -->
+<div id="startup-modal">
+  <div class="modal-card">
+    <h1>🌱 Flora 3D Engine Launcher</h1>
+    <p>Configure simulation parameters, genetics, and environment before launching.</p>
+    
+    <div class="form-group">
+      <label>Growth Habit / Preset</label>
+      <select id="cfg-habit">
+        <option value="monopodial">Monopodial (Upright Tree / Conifer)</option>
+        <option value="sympodial">Sympodial (Sprawling Bush / Cyme)</option>
+        <option value="climbing">Climbing Vine (Thigmotropic / Spiral)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Inflorescence Architecture</label>
+      <select id="cfg-inflorescence">
+        <option value="raceme">Raceme (Spike with side pedicels)</option>
+        <option value="panicle">Panicle (Branched branching cluster)</option>
+        <option value="cyme">Cyme (Terminal flower stops apex)</option>
+        <option value="spike">Spike (Direct sessile flowers)</option>
+        <option value="single">Solitary (Single prominent flower)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Ploidy & Genetics</label>
+      <select id="cfg-ploidy">
+        <option value="3">Triploid (3x Homolog Strands - Balanced)</option>
+        <option value="2">Diploid (2x Homolog Strands)</option>
+        <option value="4">Tetraploid (4x High Vigor / Robust)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Initial Random Seed</label>
+      <input type="number" id="cfg-seed" value="42">
+    </div>
+
+    <button class="btn-launch" id="btn-start-sim">🚀 Launch Simulation & 3D Viewer</button>
+    <button class="btn-randomize" id="btn-true-random">🎲 True Randomize (Alle Parameter & Genom)</button>
+  </div>
+</div>
+
+<!-- 3D WEBGL VIEWPORT -->
+<div id="viewport"></div>
+
+<!-- CONTROL RAIL -->
 <div id="ui">
-  <h2>Flora Python-Backend (Iso)</h2>
+  <h2>Flora 3D Engine <span style="font-size:10px; color:#10b981; font-weight:normal;">WebGL Active</span></h2>
   <div class="btn-row">
-      <button id="btn-grow10">Wachsen +10</button>
+      <button id="btn-grow10">Wachsen (+10)</button>
       <button id="btn-grow-season" style="background:#10b981;">+30 Steps</button>
   </div>
-  <button id="btn-reset" style="background:#475569">Zufälliger Genotyp</button>
+  <div class="btn-row">
+      <button id="btn-reset" style="background:#475569">Zufälliger Genotyp</button>
+      <button id="btn-rail-random" style="background:#8b5cf6">🎲 True Random</button>
+  </div>
   
   <div id="prune-help">
-      ✂️ <b>Gartenschere:</b> Klicke auf einen Ast, um ihn abzuschneiden. Aus der Schnittstelle treiben neue Knospen aus!
+      ✂️ <b>Gartenschere:</b> Klicke im 3D-Modus auf einen Ast, um ihn zu stutzen. Neue Knospen werden aktiviert!
   </div>
-  <div style="display:flex; gap:8px; margin-top:10px;">
-      <button id="btn-pot" style="background:#a16207; flex:1; font-size:11px; padding:8px;">🪴 Topf</button>
-      <button id="btn-schale" style="background:#44403c; flex:1; font-size:11px; padding:8px; opacity:0.6;">🥣 Schale</button>
+
+  <div class="export-row">
+      <button onclick="exportMesh('obj')">💾 Export .OBJ</button>
+      <button onclick="exportMesh('gltf')">💾 Export .glTF</button>
+  </div>
+  <div class="btn-row" style="margin-top:8px;">
+      <button id="btn-zen" style="background:#0d9488">🍃 Zen-Modus</button>
+      <button id="btn-share" style="background:#475569">🔗 Teilen</button>
   </div>
 
   <div id="greenhouse">
-      <h3 style="margin: 0 0 10px; font-size: 13px;">Samenbank</h3>
+      <h3 style="margin: 0 0 8px; font-size: 13px; color:#38bdf8;">Samenbank & Gewächshaus</h3>
       <button id="btn-save" style="background:#8b5cf6">Aktuellen Samen speichern</button>
-      <div id="slots-container"></div>
-      <button id="btn-breed" style="background:#ec4899; display:none; margin-top:10px;">🧬 Kreuzen!</button>
+      <div id="slots-container" style="margin-top:8px;"></div>
+      <button id="btn-breed" style="background:#ec4899; display:none; margin-top:8px;">🧬 Kreuzen!</button>
   </div>
-  <div id="status">Warte auf Berechnungen...</div>
+  <div id="status">Bereit.</div>
 </div>
+
+<!-- DEBUG & GENOME INSPECTOR -->
 <div id="debug-panel">
-  <h3>🧬 Genom-Debug — alle Genwerte</h3>
+  <h3>🧬 Genom-Debug</h3>
   <div id="dbg-meta" class="dbg-meta">Lade...</div>
   <h4>Stränge (polyploid)</h4>
   <div id="dbg-strands"></div>
-  <h4>Merkmale nach botanical_schema.json</h4>
+  <h4>Merkmale (Botanical Schema)</h4>
   <div id="dbg-traits"></div>
-  <div id="dbg-pool" class="dbg-pool" style="margin-top:8px;"></div>
+  <div id="dbg-pool" style="margin-top:6px; color:#64748b; font-size:10px;"></div>
 </div>
 
 <script>
-  let plantNodes = [];
-  let hoveredNode = null;
-  let hoveredPoint = null;
-  
-  const canvas = document.getElementById('iso-canvas');
-  const ctx = canvas.getContext('2d');
-  let width, height, scale = 1.0, offsetX = 0, offsetY = 0;
-  
-  function randomPolyploid() {
-      const gS = () => Array.from({length: 10}, () => Math.floor(Math.random()*4));
-      return [gS(), gS(), gS()];
+  // Check if opened via file:// protocol directly without server
+  if (window.location.protocol === 'file:') {
+      document.getElementById('connection-error').style.display = 'flex';
   }
 
+  // --- STATE & THREE.JS SETUP ---
+  let plantNodes = [];
   let currentSteps = 0;
-  let currentSeed = Math.floor(Math.random()*1000000);
-  let currentStrands = randomPolyploid();
+  let currentSeed = 42;
+  let currentStrands = [
+      [0, 1, 0, 1, 0, 0, 1, 2, 0, 1],
+      [1, 0, 0, 0, 1, 0, 0, 1, 0, 0],
+      [0, 0, 1, 0, 0, 1, 0, 0, 1, 0]
+  ];
   let greenhouse = [];
   let selectedSlots = [];
 
-  function toIso(x, y, z) {
-      const isoX = (x - y) * 0.866025; 
-      const isoY = (x + y) * 0.5 - z;
-      return { x: offsetX + isoX * scale, y: offsetY + isoY * scale };
-  }
+  // Three.js Scene, Camera, Renderer, Controls
+  const container = document.getElementById('viewport');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x090d16);
+  scene.fog = new THREE.FogExp2(0x090d16, 0.015);
 
-  // Topf/Schale — isometrischer Pflanzkübel unterm Spross
-  // Passt sich leicht dem Habitus an (wird im Debug schon dekodiert), default: schöner Terrakotta-Topf
-  let potStyle = 'topf'; // 'topf' | 'schale'
-  function drawPot() {
-      const topCenter = toIso(0, 0, 0);
-      // Maße skalieren mit Zoom, aber clampen damit Topf nie winzig/riesig wird
-      const s = Math.max(0.6, Math.min(1.6, scale));
-      const isSchale = potStyle === 'schale';
-      const topRx = (isSchale ? 32 : 24) * s;
-      const topRy = (isSchale ? 14 : 11) * s;
-      const botRx = (isSchale ? 28 : 18) * s;
-      const botRy = (isSchale ? 12 : 8) * s;
-      const h = (isSchale ? 14 : 22) * s;
-      const botCenter = { x: topCenter.x, y: topCenter.y + h };
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 15, 35);
 
-      // Schatten auf dem Boden
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.22)';
-      ctx.beginPath();
-      ctx.ellipse(botCenter.x, botCenter.y + 4, botRx + 6, botRy + 3, 0, 0, Math.PI*2);
-      ctx.fill();
-      ctx.restore();
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.shadowMap.enabled = true;
+  container.appendChild(renderer.domElement);
 
-      // Seitenwand — vordere Hälfte des Topfs
-      const leftTopX = topCenter.x - topRx;
-      const rightTopX = topCenter.x + topRx;
-      const leftBotX = botCenter.x - botRx;
-      const rightBotX = botCenter.x + botRx;
-      // Körper
-      ctx.fillStyle = isSchale ? '#9a7b5a' : '#b45a3c'; // Schale: heller Ton, Topf: Terrakotta
-      ctx.beginPath();
-      ctx.moveTo(leftTopX, topCenter.y);
-      ctx.lineTo(leftBotX, botCenter.y);
-      // bottom ellipse front half
-      ctx.ellipse(botCenter.x, botCenter.y, botRx, botRy, 0, Math.PI, 0, false);
-      ctx.lineTo(rightTopX, topCenter.y);
-      // top ellipse front half (nach innen)
-      ctx.ellipse(topCenter.x, topCenter.y, topRx, topRy, 0, 0, Math.PI, false);
-      ctx.closePath();
-      ctx.fill();
-      // Lichtkante links
-      ctx.fillStyle = isSchale ? '#c4a484' : '#d67a5a';
-      ctx.beginPath();
-      ctx.moveTo(leftTopX, topCenter.y);
-      ctx.lineTo(leftBotX, botCenter.y);
-      ctx.ellipse(botCenter.x, botCenter.y, botRx, botRy, 0, Math.PI, Math.PI*1.35, false);
-      ctx.lineTo(topCenter.x - topRx*0.35, topCenter.y + topRy*0.3);
-      ctx.ellipse(topCenter.x, topCenter.y, topRx, topRy, 0, Math.PI, Math.PI*1.35, false);
-      ctx.closePath();
-      ctx.fill();
-      // Schatten rechts
-      ctx.fillStyle = isSchale ? '#6b4f3a' : '#7a2e16';
-      ctx.beginPath();
-      ctx.moveTo(rightTopX, topCenter.y);
-      ctx.lineTo(rightBotX, botCenter.y);
-      ctx.ellipse(botCenter.x, botCenter.y, botRx, botRy, 0, Math.PI*1.65, Math.PI*2, false);
-      ctx.lineTo(topCenter.x + topRx*0.35, topCenter.y + topRy*0.3);
-      ctx.ellipse(topCenter.x, topCenter.y, topRx, topRy, 0, Math.PI*1.65, Math.PI*2, false);
-      ctx.closePath();
-      ctx.fill();
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.target.set(0, 5, 0);
 
-      // Topf-Rand (Wulst)
-      ctx.fillStyle = isSchale ? '#b8936f' : '#c96a45';
-      ctx.beginPath();
-      ctx.ellipse(topCenter.x, topCenter.y, topRx + 3, topRy + 2.5, 0, 0, Math.PI*2);
-      ctx.fill();
-      // Rand-Innen
-      ctx.fillStyle = isSchale ? '#a67c52' : '#8a3a1f';
-      ctx.beginPath();
-      ctx.ellipse(topCenter.x, topCenter.y, topRx - 1, topRy - 1, 0, 0, Math.PI*2);
-      ctx.fill();
-      // Erde
-      ctx.fillStyle = '#3a2a1a';
-      ctx.beginPath();
-      ctx.ellipse(topCenter.x, topCenter.y, topRx - 4, topRy - 2.5, 0, 0, Math.PI*2);
-      ctx.fill();
-      // kleiner Erd-Glanz
-      ctx.fillStyle = 'rgba(92,64,32,0.7)';
-      ctx.beginPath();
-      ctx.ellipse(topCenter.x - topRx*0.25, topCenter.y - topRy*0.15, topRx*0.3, topRy*0.25, 0, 0, Math.PI*2);
-      ctx.fill();
-  }
+  // Lighting
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  scene.add(ambientLight);
 
-  function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const l2 = dx * dx + dy * dy;
-      if (l2 < 1e-6) {
-          return { dist: Math.hypot(px - x1, py - y1), cx: x1, cy: y1 };
+  const dirLight = new THREE.DirectionalLight(0xffedd5, 1.2);
+  dirLight.position.set(20, 40, 20);
+  dirLight.castShadow = true;
+  scene.add(dirLight);
+
+  const groundGeo = new THREE.PlaneGeometry(100, 100);
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  const gridHelper = new THREE.GridHelper(100, 50, 0x1e293b, 0x1e293b);
+  gridHelper.position.y = 0.01;
+  scene.add(gridHelper);
+
+  let plantGroup = new THREE.Group();
+  scene.add(plantGroup);
+
+  // --- RENDERING 3D PLANT FROM NODES ---
+  function updateThreeScene() {
+      while(plantGroup.children.length > 0){ 
+          const obj = plantGroup.children[0];
+          plantGroup.remove(obj);
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) obj.material.dispose();
       }
-      let t = ((px - x1) * dx + (py - y1) * dy) / l2;
-      t = Math.max(0, Math.min(1, t));
-      const cx = x1 + t * dx;
-      const cy = y1 + t * dy;
-      return { dist: Math.hypot(px - cx, py - cy), cx, cy };
-  }
 
-  function findClosestStemNode(screenX, screenY, maxDist = 25) {
-      let closestNode = null;
-      let minDist = maxDist;
-      let closestPt = null;
-      
-      for (const n of plantNodes) {
-          if (n.type !== 'stem' && n.type !== 'floral_axis') continue;
-          if (!n.currentLength || n.currentLength <= 0.01) continue;
-          
-          const p1 = toIso(n.pos.x, n.pos.y, n.pos.z);
-          const p2 = toIso(
-              n.pos.x + n.dir.x * n.currentLength,
-              n.pos.y + n.dir.y * n.currentLength,
-              n.pos.z + n.dir.z * n.currentLength
-          );
-          
-          const res = pointToSegmentDistance(screenX, screenY, p1.x, p1.y, p2.x, p2.y);
-          if (res.dist < minDist) {
-              minDist = res.dist;
-              closestNode = n;
-              closestPt = res;
-          }
-      }
-      return closestNode ? { node: closestNode, dist: minDist, point: closestPt } : null;
-  }
+      const herbColor = new THREE.Color(0x27ae60);
+      const woodColor = new THREE.Color(0x8e44ad);
+      const flowerColor = new THREE.Color(0xe74c3c);
+      const budColor = new THREE.Color(0xf39c12);
 
-  function renderCanvas() {
-      ctx.clearRect(0, 0, width, height);
-      ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1; ctx.beginPath();
-      for(let i=-20; i<=20; i+=2) {
-          const p1 = toIso(i*40, -800, 0); const p2 = toIso(i*40, 800, 0);
-          ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-          const p3 = toIso(-800, i*40, 0); const p4 = toIso(800, i*40, 0);
-          ctx.moveTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
-      }
-      ctx.stroke();
-
-      drawPot();
-
-      plantNodes.sort((a,b) => (b.pos.x + b.pos.y) - (a.pos.x + a.pos.y));
+      const leafColor = new THREE.Color(0x2ecc71);
+      const apexColor = new THREE.Color(0xf1c40f);
+      let rendered = 0;
       plantNodes.forEach(n => {
-          const p1 = toIso(n.pos.x, n.pos.y, n.pos.z);
-          if (n.type === 'stem' || n.type === 'floral_axis') {
-              const p2 = toIso(n.pos.x + n.dir.x * n.currentLength, n.pos.y + n.dir.y * n.currentLength, n.pos.z + n.dir.z * n.currentLength);
-              const wood = Math.min(1.0, (n.age||0)/120);
-              const isHovered = (hoveredNode && hoveredNode.id === n.id);
-              
-              if (isHovered) {
-                  ctx.strokeStyle = '#ef4444'; // Highlight cut branch in bright red
-                  ctx.lineWidth = 4;
-              } else if (n.type === 'floral_axis') {
-                  ctx.strokeStyle = 'rgba(34, 197, 94, 0.9)'; // pure green thin stalks
-                  ctx.lineWidth = 1.5;
-              } else {
-                  ctx.strokeStyle = 'rgb('+(45*(1-wood)+120*wood)+','+(140*(1-wood)+80*wood)+','+(70*(1-wood)+40*wood)+')'; 
-                  ctx.lineWidth = Math.max(1, 4 * wood); // Filigranere Dicke
-              }
-              
-              // Smooth joints (keine harten Kanten mehr an den Segmentübergängen)
-              ctx.lineCap = 'round';
-              ctx.lineJoin = 'round';
-              
-              ctx.beginPath(); 
-              ctx.moveTo(p1.x, p1.y); 
-              
-              // Wir nutzen die echte 3D-Biegung (Euler-Bernoulli) der Python-Engine!
-              // Der 2D-Fake mit quadraticCurveTo hat die Tangenten der Segmente zerstört.
-              ctx.lineTo(p2.x, p2.y); 
-              ctx.stroke();
-          } else {
-              const p2 = toIso(
-                  n.pos.x + n.dir.x * (n.currentLength || 0),
-                  n.pos.y + n.dir.y * (n.currentLength || 0),
-                  n.pos.z + n.dir.z * (n.currentLength || 0)
-              );
-              
-              // Draw the pedicel (stalk) to connect the flower/leaf to the branch
-              if (n.currentLength > 0.01) {
-                  ctx.strokeStyle = 'rgba(34, 197, 94, 0.7)';
-                  ctx.lineWidth = 1;
-                  ctx.lineCap = 'round';
-                  ctx.lineJoin = 'round';
-                  ctx.beginPath();
-                  ctx.moveTo(p1.x, p1.y);
-                  ctx.lineTo(p2.x, p2.y);
-                  ctx.stroke();
-              }
-              
-              ctx.save();
-              ctx.translate(p2.x, p2.y);
-              ctx.scale(n.defX || 1, n.defY || 1);
-              if (n.type === 'flower') {
-                  let r = 255 + (n.colR||0), g = 255 + (n.colG||0), b = 255 + (n.colB||0);
-                  let r2 = 255 + (n.colR2 ?? n.colR ?? 0), g2 = 255 + (n.colG2 ?? n.colG ?? 0), b2 = 255 + (n.colB2 ?? n.colB ?? 0);
-                  
-                  let p = n.petals || 5;
-                  
-                  // Base radius (no double scaling, ctx.scale already handles it)
-                  let base_outer = 8; 
-                  let base_inner = 3;
-                  
-                  // Radial Gradient for Saftmale (Nectar Guides)
-                  let grad = ctx.createRadialGradient(0, 0, 0, 0, 0, base_outer);
-                  grad.addColorStop(0, `rgb(${r2},${g2},${b2})`); // Center color (Saftmal)
-                  grad.addColorStop(1, `rgb(${r},${g},${b})`);    // Edge color
-                  ctx.fillStyle = grad;
-                  
-                  ctx.beginPath();
-                  for (let j=0; j<p*2; j++) {
-                      let r_point = j%2===0 ? base_outer : base_inner;
-                      let ang = (j * Math.PI) / p;
-                      ctx.lineTo(Math.cos(ang)*r_point, Math.sin(ang)*r_point);
-                  }
-                  ctx.closePath();
-              } else {
-                  ctx.fillStyle = 'rgba(34, 197, 94, 0.8)';
-                  ctx.beginPath();
-                  ctx.arc(0, 0, 4, 0, Math.PI*2); // ctx.scale already scales this!
-              }
-              ctx.fill();
-              ctx.restore();
+          if (n.alive === false) return;
+          const p1 = new THREE.Vector3(n.pos.x, n.pos.z, n.pos.y);
+          const dir = new THREE.Vector3(n.dir.x, n.dir.z, n.dir.y);
+          const L = n.currentLength || 0;
+          const r = Math.max(0.03, n.radius != null ? n.radius : 0.06);
+
+          const dirN = dir.clone().normalize();
+          const nowMs = performance.now();
+          const seenMax = window._maxSeenId || 0;
+          const born = n.id > seenMax ? nowMs : nowMs - 5000;
+          window._maxSeenId = Math.max(seenMax, n.id);
+
+          if ((n.type === 'stem' || n.type === 'floral_axis') && L > 0.001) {
+              const woodiness = Math.min(1.0, (n.age || 0) / 100);
+              const matColor = herbColor.clone().lerp(woodColor, woodiness);
+
+              const geometry = new THREE.CylinderGeometry(Math.max(0.02, r * 0.8), r, L, 6);
+              geometry.translate(0, L / 2, 0);
+              const material = new THREE.MeshStandardMaterial({ color: matColor, roughness: 0.6 });
+              const cylinder = new THREE.Mesh(geometry, material);
+
+              cylinder.position.copy(p1);
+              cylinder.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dirN);
+              cylinder.castShadow = true;
+              cylinder.receiveShadow = true;
+              cylinder.scale.set(1, 0.03, 1);
+              cylinder.userData = { nodeId: n.id, type: 'stem', born: born, grown: false };
+              plantGroup.add(cylinder);
+              rendered++;
+
+          } else if (n.type === 'flower') {
+              const geometry = new THREE.SphereGeometry(Math.max(0.15, r * 1.2), 8, 8);
+              const material = new THREE.MeshStandardMaterial({ color: flowerColor, emissive: 0x551111, roughness: 0.3 });
+              const sphere = new THREE.Mesh(geometry, material);
+              sphere.position.copy(p1).addScaledVector(dirN, Math.max(L, 0.1));
+              sphere.castShadow = true;
+              sphere.scale.set(0.03, 0.03, 0.03);
+              sphere.userData = { nodeId: n.id, type: 'tip', born: born, grown: false, p1: p1.clone(), dir: dirN.clone(), L: Math.max(L, 0.1) };
+              plantGroup.add(sphere);
+              rendered++;
+          } else if (n.type === 'bud' || n.type === 'apex') {
+              const geometry = new THREE.SphereGeometry(0.12, 6, 6);
+              const material = new THREE.MeshStandardMaterial({ color: n.type === 'apex' ? apexColor : budColor, roughness: 0.5 });
+              const sphere = new THREE.Mesh(geometry, material);
+              sphere.position.copy(p1);
+              sphere.scale.set(0.03, 0.03, 0.03);
+              sphere.userData = { nodeId: n.id, type: 'static', born: born, grown: false };
+              plantGroup.add(sphere);
+              rendered++;
+          } else if (n.type === 'leaf') {
+              const geometry = new THREE.SphereGeometry(0.18, 6, 6);
+              geometry.scale(1.0, 0.4, 1.6);
+              const material = new THREE.MeshStandardMaterial({ color: leafColor, roughness: 0.7 });
+              const leaf = new THREE.Mesh(geometry, material);
+              leaf.position.copy(p1).addScaledVector(dirN, Math.max(L, 0.3));
+              leaf.scale.set(0.03, 0.03, 0.03);
+              leaf.userData = { nodeId: n.id, type: 'tip', born: born, grown: false, p1: p1.clone(), dir: dirN.clone(), L: Math.max(L, 0.3) };
+              plantGroup.add(leaf);
+              rendered++;
           }
       });
-
-      // Draw scissors marker if hovering near a cut point
-      if (hoveredNode && hoveredPoint) {
-          ctx.save();
-          ctx.fillStyle = '#ef4444';
-          ctx.beginPath();
-          ctx.arc(hoveredPoint.cx, hoveredPoint.cy, 4, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.font = '14px sans-serif';
-          ctx.fillText('✂️', hoveredPoint.cx + 6, hoveredPoint.cy - 6);
-          ctx.restore();
+      if (plantNodes.length > 0 && rendered === 0) {
+          console.warn('updateThreeScene: 0 von ' + plantNodes.length + ' Knoten gerendert, Typen: ' + [...new Set(plantNodes.map(n => n.type))].join(','));
       }
   }
 
-  function resize() {
-      width = window.innerWidth; height = window.innerHeight;
-      canvas.width = width; canvas.height = height;
-      offsetX = width / 2; offsetY = height - 100;
-      renderCanvas();
+  // --- API CALLS ---
+  async function simulateGrowth(steps = 10, isReset = false) {
+      const statusEl = document.getElementById('status');
+      statusEl.innerText = isReset ? 'Initialisiere Genom in Python...' : `Wachstum (+${steps} Steps)...`;
+      try {
+          const res = await fetch('/api/simulate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ steps: steps, seed: currentSeed, strands: currentStrands, reset: isReset })
+          });
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+          const data = await res.json();
+          plantNodes = data.nodes;
+          if(data.strands) currentStrands = data.strands;
+          if(data.debug) renderDebug(data.debug);
+          currentSteps = data.step !== undefined ? data.step : (isReset ? steps : currentSteps + steps);
+          const typeCounts = {};
+          plantNodes.forEach(n => { typeCounts[n.type] = (typeCounts[n.type] || 0) + 1; });
+          const typeStr = Object.entries(typeCounts).map(([k, v]) => `${k}:${v}`).join(' ');
+          statusEl.innerText = `[Step ${currentSteps}] ${plantNodes.length} Knoten aktiv (${typeStr}). Meshes: ${plantGroup.children.length}.`;
+          updateThreeScene();
+          if (isReset) frameCameraOnPlant();
+          saveGarden();
+      } catch (err) {
+          statusEl.innerText = 'Server Fehler: ' + err.message;
+          document.getElementById('connection-error').style.display = 'flex';
+      }
   }
-  window.addEventListener('resize', resize);
-  
-  let isMouseDown = false;
-  let lastX = 0, lastY = 0;
-  let dragDist = 0;
-
-  canvas.addEventListener('mousedown', e => {
-      isMouseDown = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      dragDist = 0;
-  });
-
-  window.addEventListener('mouseup', async e => {
-      if (!isMouseDown) return;
-      isMouseDown = false;
-      
-      // If user clicked without dragging, perform pruning!
-      if (dragDist < 6) {
-          const rect = canvas.getBoundingClientRect();
-          const mouseX = e.clientX - rect.left;
-          const mouseY = e.clientY - rect.top;
-          const target = findClosestStemNode(mouseX, mouseY, 25);
-          if (target && target.node) {
-              await pruneBranch(target.node.id);
-          }
-      }
-  });
-
-  window.addEventListener('mousemove', e => {
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      
-      if (isMouseDown) {
-          const dx = e.clientX - lastX;
-          const dy = e.clientY - lastY;
-          dragDist += Math.hypot(dx, dy);
-          offsetX += dx;
-          offsetY += dy;
-          lastX = e.clientX;
-          lastY = e.clientY;
-          renderCanvas();
-      } else {
-          const target = findClosestStemNode(mouseX, mouseY, 25);
-          const newHoverNode = target ? target.node : null;
-          const newHoverPoint = target ? target.point : null;
-          
-          if ((hoveredNode ? hoveredNode.id : null) !== (newHoverNode ? newHoverNode.id : null)) {
-              hoveredNode = newHoverNode;
-              hoveredPoint = newHoverPoint;
-              canvas.style.cursor = hoveredNode ? 'pointer' : 'default';
-              renderCanvas();
-          }
-      }
-  });
-
-  canvas.addEventListener('wheel', e => { e.preventDefault(); scale *= e.deltaY > 0 ? 0.9 : 1.1; renderCanvas(); });
 
   async function pruneBranch(nodeId) {
       const statusEl = document.getElementById('status');
@@ -399,100 +399,170 @@
               body: JSON.stringify({ node_id: nodeId })
           });
           const data = await res.json();
-          if (data.nodes) {
-              plantNodes = data.nodes;
-          }
-          if(data.debug) renderDebug(data.debug);
-          hoveredNode = null;
-          hoveredPoint = null;
-          canvas.style.cursor = 'default';
-          statusEl.innerText = `✂️ Ast #${nodeId} gestutzt (${data.killed_count || 0} Nachfolger entfernt). Schnittstelle ist nun schlafende Knospe.`;
-          renderCanvas();
+          if (data.nodes) plantNodes = data.nodes;
+          if (data.debug) renderDebug(data.debug);
+          statusEl.innerText = `✂️ Ast #${nodeId} gestutzt (${data.killed_count || 0} Nachfolger entfernt).`;
+          updateThreeScene();
       } catch (err) {
           statusEl.innerText = 'Pruning Fehler: ' + err.message;
       }
   }
 
-  async function simulateGrowth(steps = 10, isReset = false) {
+  function frameCameraOnPlant() {
+      if (plantNodes.length === 0) return;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      plantNodes.forEach(n => {
+          const x = n.pos.x, y = n.pos.z, z = n.pos.y;
+          const L = n.currentLength || 0;
+          minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y); maxY = Math.max(maxY, y + L);
+          minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+      });
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+      const size = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 5);
+      controls.target.set(cx, cy, cz);
+      camera.position.set(cx + size * 0.8, cy + size * 0.5, cz + size * 1.2);
+      camera.lookAt(controls.target);
+  }
+
+  async function cutAtBranch(nodeId, t) {
       const statusEl = document.getElementById('status');
-      statusEl.innerText = isReset ? 'Initialisiere Genom in Python...' : `Wachstum (+${steps} Steps)...`;
+      statusEl.innerText = `✂️ Schnitt bei ${(t * 100).toFixed(0)}% an Ast #${nodeId}...`;
       try {
-          const res = await fetch('/api/simulate', {
+          const res = await fetch('/api/cut_at', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ steps: steps, seed: currentSeed, strands: currentStrands, reset: isReset })
+              body: JSON.stringify({ node_id: nodeId, t: t })
           });
           const data = await res.json();
-          plantNodes = data.nodes;
-          if(data.strands) currentStrands = data.strands;
-          if(data.debug) renderDebug(data.debug); else renderDebug(buildClientDebug(currentStrands));
-          currentSteps = data.step !== undefined ? data.step : (isReset ? steps : currentSteps + steps);
-          statusEl.innerText = `[Step ${currentSteps}] ${plantNodes.length} Knoten aktiv.`;
-          
-          if (isReset && plantNodes.length > 0) {
-              let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-              plantNodes.forEach(n => {
-                  const p = toIso(n.pos.x, n.pos.y, n.pos.z);
-                  minX = Math.min(minX, p.x - offsetX); maxX = Math.max(maxX, p.x - offsetX);
-                  minY = Math.min(minY, p.y - offsetY); maxY = Math.max(maxY, p.y - offsetY);
-              });
-              offsetX = width/2 - (minX + maxX)/2;
-              offsetY = height/2 - (minY + maxY)/2;
-          }
-          renderCanvas();
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+          if (data.nodes) plantNodes = data.nodes;
+          if (data.debug) renderDebug(data.debug);
+          statusEl.innerText = `✂️ Ast #${nodeId} bei ${(t * 100).toFixed(0)}% geschnitten (${data.killed_count || 0} entfernt, ${(data.bud_ids || []).length} schlafende Knospen aktiv).`;
+          updateThreeScene();
       } catch (err) {
-          statusEl.innerText = 'Python Server Fehler: ' + err.message;
+          statusEl.innerText = 'Schnitt Fehler: ' + err.message;
       }
   }
 
-  document.getElementById('btn-grow10').onclick = () => { simulateGrowth(10, false); };
-  document.getElementById('btn-grow-season').onclick = () => { simulateGrowth(30, false); };
+  async function exportMesh(format) {
+      window.open(`/api/export/${format}`, '_blank');
+  }
+
+  // --- TRUE RANDOMIZE FUNCTION ---
+  function trueRandomizeAndLaunch() {
+      const habits = ['monopodial', 'sympodial', 'climbing'];
+      const inflos = ['raceme', 'panicle', 'cyme', 'spike', 'single'];
+      const ploidies = [2, 3, 4];
+
+      document.getElementById('cfg-habit').value = habits[Math.floor(Math.random() * habits.length)];
+      document.getElementById('cfg-inflorescence').value = inflos[Math.floor(Math.random() * inflos.length)];
+      
+      const chosenPloidy = ploidies[Math.floor(Math.random() * ploidies.length)];
+      document.getElementById('cfg-ploidy').value = chosenPloidy;
+
+      currentSeed = Math.floor(Math.random() * 999999);
+      document.getElementById('cfg-seed').value = currentSeed;
+
+      // Generate random polyploid strands
+      const gS = () => Array.from({length: 10}, () => Math.floor(Math.random()*4));
+      currentStrands = Array.from({length: chosenPloidy}, gS);
+
+      // Hide startup modal with smooth fade
+      const modal = document.getElementById('startup-modal');
+      modal.style.opacity = '0';
+      setTimeout(() => modal.style.display = 'none', 400);
+
+      simulateGrowth(20, true);
+  }
+
+  // --- RAYCASTING FOR 3D PRUNING ---
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+
+  window.addEventListener('click', e => {
+      if (e.clientX < 380 && e.clientY < window.innerHeight - 50) return;
+      if (document.getElementById('startup-modal').style.display !== 'none') return;
+
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(plantGroup.children);
+
+      if (intersects.length > 0) {
+          const hitMesh = intersects[0].object;
+          const u = hitMesh.userData || {};
+          if (u.nodeId === undefined) return;
+          const node = plantNodes.find(n => n.id === u.nodeId);
+          let t = 0.5;
+          if (node && node.currentLength > 0.001) {
+              const p1 = new THREE.Vector3(node.pos.x, node.pos.z, node.pos.y);
+              const dir = new THREE.Vector3(node.dir.x, node.dir.z, node.dir.y).normalize();
+              const along = intersects[0].point.clone().sub(p1).dot(dir);
+              t = Math.min(0.99, Math.max(0.01, along / node.currentLength));
+          }
+          cutAtBranch(u.nodeId, t);
+      }
+  });
+
+  // --- UI EVENT LISTENERS ---
+  document.getElementById('btn-start-sim').onclick = () => {
+      const chosenPloidy = parseInt(document.getElementById('cfg-ploidy').value);
+      currentSeed = parseInt(document.getElementById('cfg-seed').value) || 42;
+
+      const gS = () => Array.from({length: 10}, () => Math.floor(Math.random()*4));
+      currentStrands = Array.from({length: chosenPloidy}, gS);
+
+      const modal = document.getElementById('startup-modal');
+      modal.style.opacity = '0';
+      setTimeout(() => modal.style.display = 'none', 400);
+
+      const steps = 20 + pendingCatchup;
+      pendingCatchup = 0;
+      simulateGrowth(steps, true);
+  };
+
+  document.getElementById('btn-true-random').onclick = trueRandomizeAndLaunch;
+  document.getElementById('btn-rail-random').onclick = trueRandomizeAndLaunch;
+
+  document.getElementById('btn-grow10').onclick = () => simulateGrowth(10, false);
+  document.getElementById('btn-grow-season').onclick = () => simulateGrowth(30, false);
   document.getElementById('btn-reset').onclick = () => {
-      currentSeed = Math.floor(Math.random()*1000000);
-      currentStrands = randomPolyploid();
-      renderDebug(buildClientDebug(currentStrands));
-      currentSteps = 0;
+      currentSeed = Math.floor(Math.random() * 1000000);
       simulateGrowth(15, true);
   };
-  function updatePotButtons(){
-      const bTopf = document.getElementById('btn-pot');
-      const bSchale = document.getElementById('btn-schale');
-      if(potStyle==='topf'){ bTopf.style.opacity='1'; bTopf.style.border='1px solid #fbbf24'; bSchale.style.opacity='0.6'; bSchale.style.border='none'; }
-      else { bSchale.style.opacity='1'; bSchale.style.border='1px solid #fbbf24'; bTopf.style.opacity='0.6'; bTopf.style.border='none'; }
-  }
-  document.getElementById('btn-pot').onclick = () => { potStyle='topf'; window._potManuallyChosen=true; updatePotButtons(); renderCanvas(); };
-  document.getElementById('btn-schale').onclick = () => { potStyle='schale'; window._potManuallyChosen=true; updatePotButtons(); renderCanvas(); };
-  updatePotButtons();
-  
+
+  document.getElementById('btn-save').onclick = () => {
+      greenhouse.push(JSON.parse(JSON.stringify(currentStrands)));
+      renderGreenhouse();
+  };
+
   function renderGreenhouse() {
       const slots = document.getElementById('slots-container');
-      if (greenhouse.length === 0) return slots.innerHTML = '<div style="font-size:11px; color:#64748b;">Leer.</div>';
+      if (greenhouse.length === 0) return slots.innerHTML = '<div style="font-size:11px; color:#64748b;">Noch keine Samen.</div>';
       slots.innerHTML = greenhouse.map((g, i) => {
           const sel = selectedSlots.includes(i) ? 'selected' : '';
-          return '<div class="slot '+sel+'" onclick="window.toggleSlot('+i+')">Samen '+(i+1)+' (Python Genom)</div>';
+          return `<div class="slot ${sel}" onclick="toggleSlot(${i})"><span>Samen ${i+1} (${g.length}x Ploidie)</span><span>🧬</span></div>`;
       }).join('');
       document.getElementById('btn-breed').style.display = selectedSlots.length === 2 ? 'block' : 'none';
   }
+
   window.toggleSlot = function(idx) {
       const i = selectedSlots.indexOf(idx);
       if (i > -1) selectedSlots.splice(i, 1);
       else { if (selectedSlots.length >= 2) selectedSlots.shift(); selectedSlots.push(idx); }
       renderGreenhouse();
   };
-  document.getElementById('btn-save').onclick = () => { greenhouse.push(JSON.parse(JSON.stringify(currentStrands))); renderGreenhouse(); };
-  
+
   document.getElementById('btn-breed').onclick = async () => {
-      if(selectedSlots.length === 2) {
-          const statusEl = document.getElementById('status');
-          statusEl.innerText = 'Berechne Meiose in Python...';
+      if (selectedSlots.length === 2) {
           const res = await fetch('/api/breed', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ g1: greenhouse[selectedSlots[0]], g2: greenhouse[selectedSlots[1]], seed: Math.floor(Math.random()*1000000) })
           });
           const data = await res.json();
           currentStrands = data.strands;
-          renderDebug(buildClientDebug(currentStrands));
-          currentSeed = Math.floor(Math.random()*1000000);
           selectedSlots = [];
           renderGreenhouse();
           simulateGrowth(15, true);
@@ -505,59 +575,123 @@
     blaetter: { stellung: ["wechselständig","gegenständig","quirlständig"], form: ["eiförmig","lanzettlich","herzförmig","spatelförmig","fiederspaltig"], rand: ["ganzrandig","gezähnt","gesägt","gelappt"] },
     blueten: { bluetenstand: ["traube","aehre","rispe","dolde","koepfchen","einzelbluete"], symmetrie: ["radiaersymmetrisch","zygomorph","asymmetrisch"] }
   };
-  const LOCUS_LABELS = ["habitus.wuchsform","habitus.lebensform","sprossachse.querschnitt","sprossachse.oberflaeche","blaetter.stellung","blaetter.form","blaetter.rand","blueten.bluetenstand","blueten.symmetrie","farbe/symmetrie-mod"];
+  const LOCUS_LABELS = ["Habitus","Lebensform","Querschnitt","Oberfläche","Blattstellung","Blattform","Blattrand","Blütenstand","Symmetrie","Modifikation"];
 
-  function buildClientDebug(strands){
-    const maxLen = Math.max(...strands.map(s=>s.length), 0);
-    const pool = {};
-    for(let l=0;l<maxLen;l++) pool[l]=[];
-    strands.forEach(s=> s.forEach((a,l)=> pool[l].push(a)));
-    Object.keys(pool).forEach(k=> pool[k].sort((a,b)=>a-b));
-    const traits=[];
-    for(let l=0;l<LOCUS_LABELS.length;l++){
-      const alleles = pool[l]||[0];
-      const label = LOCUS_LABELS[l];
-      let decoded='';
-      if(l===0) decoded = BOTANICAL_SCHEMA.habitus.wuchsform[(alleles[0]||0)%6];
-      else if(l===1) decoded = BOTANICAL_SCHEMA.habitus.lebensform[(alleles[0]||0)%5];
-      else if(l===2) decoded = BOTANICAL_SCHEMA.sprossachse.querschnitt[(alleles[0]||0)%4];
-      else if(l===3) decoded = BOTANICAL_SCHEMA.sprossachse.oberflaeche[(alleles[0]||0)%4];
-      else if(l===4) decoded = BOTANICAL_SCHEMA.blaetter.stellung[(alleles[0]||0)%3];
-      else if(l===5) decoded = BOTANICAL_SCHEMA.blaetter.form[(alleles[0]||0)%5];
-      else if(l===6) decoded = BOTANICAL_SCHEMA.blaetter.rand[(alleles[0]||0)%4];
-      else if(l===7) decoded = BOTANICAL_SCHEMA.blueten.bluetenstand[(alleles[0]||0)%6];
-      else if(l===8) decoded = BOTANICAL_SCHEMA.blueten.symmetrie[(alleles[0]||0)%3];
-      else decoded = `alleles=${alleles.join(',')}`;
-      traits.push({locus:l, label, alleles, decoded});
-    }
-    return {strands, ploidy: strands.length, pool, traits};
+  function renderDebug(debug) {
+      if (!debug) return;
+      document.getElementById('dbg-meta').innerText = `Ploidie: ${debug.ploidy}× | Loci: ${Object.keys(debug.pool||{}).length}`;
+      document.getElementById('dbg-strands').innerHTML = (debug.strands||[]).map((s,i)=> `<div class="dbg-strand">Strang ${i+1}: [${s.join(', ')}]</div>`).join('');
+      document.getElementById('dbg-traits').innerHTML = (debug.traits||[]).map(t=> `<div class="dbg-trait"><b>${LOCUS_LABELS[t.locus]||t.label}</b><span>${t.decoded}</span></div>`).join('');
   }
 
-  function renderDebug(debug){
-    if(!debug) { debug = buildClientDebug(currentStrands); }
-    const meta = document.getElementById('dbg-meta');
-    const sEl = document.getElementById('dbg-strands');
-    const tEl = document.getElementById('dbg-traits');
-    const pEl = document.getElementById('dbg-pool');
-    meta.innerText = `Ploidie: ${debug.ploidy}×  |  Loci: ${Object.keys(debug.pool||{}).length}  |  Seed: ${currentSeed}`;
-    sEl.innerHTML = (debug.strands||[]).map((s,i)=> `<div class="dbg-strand">Strang ${i+1}: [${s.join(', ')}]</div>`).join('');
-    tEl.innerHTML = (debug.traits||[]).map(t=> `<div class="dbg-trait"><b>${t.locus}: ${t.label}</b><span>${t.decoded} <span class="dbg-pool">[${(t.alleles||[]).join(',')}]</span></span></div>`).join('');
-    pEl.innerText = `Pool (sortiert je Locus): ${JSON.stringify(debug.pool)}`;
-    // Habitus-Kopplung: Wuchsform steuert Topf/Schale automatisch
-    const wuchs = (debug.traits && debug.traits[0] && debug.traits[0].decoded) || '';
-    const schaleFormen = ['polsterförmig','rosettenbildend','kriechend','hängend'];
-    const autoStyle = schaleFormen.includes(wuchs) ? 'schale' : 'topf';
-    if(potStyle !== autoStyle){
-        potStyle = autoStyle;
-        if(typeof updatePotButtons === 'function') updatePotButtons();
-    }
+  // --- ZEN GARDEN: wall-clock persistence, share links, zen mode ---
+  const GARDEN_KEY = 'floraZenGarden';
+  let pendingCatchup = 0;
+
+  function saveGarden() {
+      try {
+          localStorage.setItem(GARDEN_KEY, JSON.stringify({
+              seed: currentSeed, strands: currentStrands, steps: currentSteps, savedAt: Date.now()
+          }));
+      } catch (err) { /* private mode etc. — garden simply won't persist */ }
   }
 
-  // initial render before server reply
-  renderDebug(null);
+  function loadGarden() {
+      try {
+          const raw = localStorage.getItem(GARDEN_KEY);
+          if (!raw) return null;
+          const g = JSON.parse(raw);
+          if (!g || !Array.isArray(g.strands)) return null;
+          return g;
+      } catch (err) { return null; }
+  }
 
-  resize();
-  simulateGrowth(15, true);
+  function applySharedHash() {
+      if (!window.location.hash || window.location.hash.length < 4) return false;
+      try {
+          const g = JSON.parse(atob(window.location.hash.slice(1)));
+          if (g && g.seed !== undefined && Array.isArray(g.strands)) {
+              currentSeed = g.seed;
+              currentStrands = g.strands;
+              document.getElementById('cfg-seed').value = currentSeed;
+              document.getElementById('cfg-ploidy').value = currentStrands.length;
+              return true;
+          }
+      } catch (err) { /* ignore malformed share links */ }
+      return false;
+  }
+
+  (function restoreGarden() {
+      if (applySharedHash()) return;
+      const g = loadGarden();
+      if (!g) return;
+      currentSeed = g.seed;
+      currentStrands = g.strands;
+      document.getElementById('cfg-seed').value = currentSeed;
+      try { document.getElementById('cfg-ploidy').value = currentStrands.length; } catch (err) {}
+      const elapsedMin = Math.max(0, (Date.now() - (g.savedAt || Date.now())) / 60000);
+      pendingCatchup = Math.min(150, Math.floor(elapsedMin));
+      if (pendingCatchup > 0) {
+          const card = document.querySelector('.modal-card p');
+          if (card) card.innerText = `Willkommen zurück — dein Garten ist gewachsen (+${pendingCatchup} Zeit-Schritte warten).`;
+      }
+  })();
+
+  const zenExit = document.createElement('button');
+  zenExit.innerText = '✕ Zen beenden';
+  zenExit.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:50;width:auto;padding:8px 18px;display:none;background:#0d9488;';
+  document.body.appendChild(zenExit);
+
+  function setZen(on) {
+      controls.autoRotate = on;
+      controls.autoRotateSpeed = 0.8;
+      document.getElementById('btn-zen').innerText = on ? '🍃 Zen-Modus: an' : '🍃 Zen-Modus';
+      document.getElementById('ui').style.display = on ? 'none' : 'block';
+      document.getElementById('debug-panel').style.display = on ? 'none' : 'block';
+      zenExit.style.display = on ? 'block' : 'none';
+  }
+
+  document.getElementById('btn-zen').onclick = () => setZen(true);
+  zenExit.onclick = () => setZen(false);
+
+  document.getElementById('btn-share').onclick = async () => {
+      const payload = btoa(JSON.stringify({ seed: currentSeed, strands: currentStrands }));
+      const url = window.location.origin + window.location.pathname + '#' + payload;
+      try {
+          await navigator.clipboard.writeText(url);
+          document.getElementById('status').innerText = '🔗 Teil-Link in Zwischenablage kopiert.';
+      } catch (err) {
+          prompt('Teil-Link kopieren:', url);
+      }
+  };
+
+  function animate() {
+      requestAnimationFrame(animate);
+      const nowMs = performance.now();
+      for (const m of plantGroup.children) {
+          const u = m.userData;
+          if (!u || !u.born || u.grown) continue;
+          const s = Math.min(1, 0.03 + (nowMs - u.born) / 1600 * 0.97);
+          if (u.type === 'stem') {
+              m.scale.set(1, s, 1);
+          } else if (u.type === 'tip') {
+              m.scale.set(s, s, s);
+              m.position.copy(u.p1).addScaledVector(u.dir, u.L * s);
+          } else {
+              m.scale.set(s, s, s);
+          }
+          if (s >= 1) { u.grown = true; m.scale.set(1, 1, 1); }
+      }
+      controls.update();
+      renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+  });
 </script>
 </body>
 </html>

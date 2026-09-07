@@ -7,6 +7,12 @@ from pathlib import Path
 from flora.core.config import EngineConfig, MorphologyConfig, InflorescenceConfig, MechanicsConfig, NodeType
 from flora import create_default_engine
 from flora.biology.genetics import Genome, breed, extract_phenotype_pool
+from flora.biology.pruning import cut_at
+from flora.io.exporter import export_obj, export_gltf
+
+#: Upper bound for a single /api/simulate call so wall-clock catch-up
+#: (zen garden "grew while you were away") cannot explode the plant.
+MAX_CATCHUP_STEPS = 200
 
 #: Directory containing this server; used to locate the hand-authored UI template
 #: regardless of the process CWD (server is safe to launch from any directory).
@@ -134,6 +140,7 @@ def serialize_nodes(engine, pheno):
     parent = snap['parent'][:n]
     alive = snap['alive'][:n] if 'alive' in snap else engine.state.alive[:n]
     woodiness = snap['woodiness'][:n] if 'woodiness' in snap else np.zeros(n)
+    radius = snap['radius'][:n] if 'radius' in snap else np.full(n, 0.005)
     
     # We need to compute headings for each node to get its tip position
     from flora.core.spatial import quat_rotate, UP_VECTOR
@@ -160,16 +167,22 @@ def serialize_nodes(engine, pheno):
         ntype = 'stem'
         if types[i] == NodeType.FLOWER:
             ntype = 'flower'
-        elif types[i] == NodeType.LEAF or types[i] == int(NodeType.BUD_DORMANT) or types[i] == int(NodeType.APEX):
+        elif types[i] == NodeType.LEAF:
             ntype = 'leaf'
+        elif types[i] == NodeType.BUD_DORMANT:
+            ntype = 'bud'
+        elif types[i] == NodeType.APEX:
+            ntype = 'apex'
         elif types[i] == NodeType.FLORAL_AXIS or types[i] == 3:
             ntype = 'floral_axis'
-            
+
         node_dict = {
             'id': int(i),
             'parentId': int(parent[i]),
             'type': ntype,
             'nodeType': int(types[i]),
+            'alive': True,
+            'radius': float(radius[i] * 100),
             'pos': {'x': float(p1[0] * 100), 'y': float(p1[1] * 100), 'z': float(p1[2] * 100)},
             'dir': {'x': dir_x, 'y': dir_y, 'z': dir_z},
             'currentLength': length * 100,
@@ -251,6 +264,21 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
             self.end_headers()
             ui_path = _BASE_DIR / 'interactive_ui.html'
             self.wfile.write(ui_path.read_bytes())
+        elif self.path in ('/manifest.webmanifest', '/sw.js', '/flora-icon.svg'):
+            ctype = {
+                '/manifest.webmanifest': 'application/manifest+json',
+                '/sw.js': 'application/javascript',
+                '/flora-icon.svg': 'image/svg+xml',
+            }[self.path]
+            target = _BASE_DIR / self.path.lstrip('/')
+            if not target.exists():
+                self.send_response(404)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header('Content-type', ctype)
+            self.end_headers()
+            self.wfile.write(target.read_bytes())
         else:
             self.send_response(404)
             self.end_headers()
@@ -262,7 +290,7 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             req = json.loads(post_data.decode('utf-8'))
             
-            steps = req.get('steps', 10)
+            steps = min(int(req.get('steps', 10)), MAX_CATCHUP_STEPS)
             seed = req.get('seed', 42)
             strands = req.get('strands', [])
             reset = req.get('reset', False)
@@ -395,6 +423,79 @@ class InteractiveFloraHandler(BaseHTTPRequestHandler):
                 'debug': debug,
             }).encode('utf-8'))
             
+        elif self.path == '/api/cut_at':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            req = json.loads(post_data.decode('utf-8')) if post_data else {}
+
+            if _current_engine is None:
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': 'No active simulation'}).encode('utf-8'))
+                return
+
+            try:
+                res = cut_at(
+                    _current_engine.state,
+                    int(req.get('node_id', -1)),
+                    float(req.get('t', 0.5)),
+                )
+            except ValueError as exc:
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(exc)}).encode('utf-8'))
+                return
+
+            if 'floral_consumed' in _current_engine.ctx.cache:
+                _current_engine.ctx.cache['floral_consumed'].difference_update(
+                    res.get('bud_ids', [])
+                )
+
+            nodes_json = serialize_nodes(_current_engine, _current_pheno)
+            debug = _build_debug_info(_current_strands or [], _current_pheno or {})
+
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                'status': 'ok',
+                'stub_id': res['stub_id'],
+                'killed_count': res['killed_count'],
+                'bud_ids': res['bud_ids'],
+                'nodes': nodes_json,
+                'debug': debug,
+            }).encode('utf-8'))
+
+        elif self.path == '/api/export/obj':
+            if _current_engine is None:
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': 'No active simulation'}).encode('utf-8'))
+                return
+            obj_str = export_obj(_current_engine.state)
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.send_header('Content-Disposition', 'attachment; filename="plant.obj"')
+            self.end_headers()
+            self.wfile.write(obj_str.encode('utf-8'))
+
+        elif self.path == '/api/export/gltf':
+            if _current_engine is None:
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': 'No active simulation'}).encode('utf-8'))
+                return
+            gltf_dict = export_gltf(_current_engine.state)
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Content-Disposition', 'attachment; filename="plant.gltf"')
+            self.end_headers()
+            self.wfile.write(json.dumps(gltf_dict, indent=2).encode('utf-8'))
+
         elif self.path == '/api/breed':
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
