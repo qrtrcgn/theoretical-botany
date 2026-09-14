@@ -595,7 +595,7 @@ if (season2 > 100 && season2 <= 140) {
       const startX = parentDisp ? parentDisp.wx : n.x;
       const startY = parentDisp ? parentDisp.wy : n.y;
 
-      const stiffness = Math.pow(0.55, n.depth * detailFactor);
+      const stiffness = Math.pow(0.55, n.depth);
       const lengthFactor = Math.min(1, n.targetLength / g.lenScale);
       const depthFactor = stiffness * lengthFactor;
 
@@ -607,8 +607,8 @@ if (season2 > 100 && season2 <= 140) {
       const baseWind = fbm(windPhase * 0.7 + n.depth * 0.17 + n.id * 0.01, baseWindOctaves) * 2 - 1;
       const localWind = baseWind * 0.06 * g.windSensitivity * depthFactor * gustStrength;
 
-      const swayFreq = windPhase * 0.3 + n.depth * 0.13 * detailFactor;
-      const sway = Math.sin(swayFreq) * Math.sin(swayFreq * 1.7 + 0.5) * 0.015 * g.windSensitivity * depthFactor * detailFactor;
+      const swayFreq = windPhase * 0.3 + n.depth * 0.13;
+      const sway = Math.sin(swayFreq) * Math.sin(swayFreq * 1.7 + 0.5) * 0.015 * g.windSensitivity * depthFactor;
 
       const totalWind = localWind + sway;
       const cumulativeAngle = n.angle + totalWind;
@@ -620,9 +620,9 @@ if (season2 > 100 && season2 <= 140) {
         const thickness = getThickness(n.id);
         const woodiness = Math.min(1, n.age / 50);
         const genomeStiffness = g.stiffness ?? 1.0;
-        const stiffnessVal = Math.pow(thickness + 0.5, 2.0) * (0.55 + woodiness * 1.3 * detailFactor) * genomeStiffness;
+        const stiffnessVal = Math.pow(thickness + 0.5, 2.0) * (0.55 + woodiness * 1.3) * genomeStiffness;
         const rawBend = (0.2 * weight) / Math.max(0.05, stiffnessVal);
-        const sagDistance = Math.min(rawBend, 0.55 * detailFactor) * n.length;
+        const sagDistance = Math.min(rawBend, 0.55) * n.length;
         endY += sagDistance;
       }
 
