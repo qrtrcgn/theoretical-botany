@@ -1,0 +1,76 @@
+# =============================================================================
+# ZenPlant Agentic Coding Model
+# Basis: Qwen 3.5 Coder (14B) – optimiert für TypeScript, Bun, Playwright
+# Hardware: AMD Ryzen AI MAX PRO 385 (16 Kerne, Radeon 8050S/8060S)
+# =============================================================================
+
+# --- BASE MODEL ---
+FROM qwen3.5:14b
+
+# --- CONTEXT & MEMORY (kritisch für Agenten mit Tool-History) ---
+# 32k Context = ~24.000 Wörter = genug für gesamte Codebase + Test-Logs
+PARAMETER num_ctx 32768
+
+# --- SAMPLING (deterministisch für Code, aber kreativ genug für Refactoring) ---
+PARAMETER temperature 0.3
+PARAMETER top_p 0.85
+PARAMETER top_k 20
+PARAMETER repeat_penalty 1.05
+PARAMETER repeat_last_n 128
+
+# --- OUTPUT LIMITS ---
+# Max 4096 Token pro Antwort (reicht für komplette Dateien + Erklärungen)
+PARAMETER num_predict 4096
+
+# --- GPU OFFLOAD (alle Layer auf GPU, falls VRAM reicht) ---
+# Radeon 8050S hat ~16 GB VRAM → 14B-Modell passt komplett
+PARAMETER num_gpu 999
+PARAMETER num_thread 16
+PARAMETER num_batch 512
+PARAMETER f16_kv true
+
+# --- STOP SEQUENCES (verhindert Halluzinationen & Endlosschleifen) ---
+PARAMETER stop "```"
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "</s>"
+
+# --- SYSTEM PROMPT (baked-in für konsistentes Agenten-Verhalten) ---
+SYSTEM """
+Du bist ein autonomer Software-Engineering-Agent für das ZenPlant-Projekt.
+
+DEINE AUFGABEN:
+1. Lies und verstehe die Codebase (TypeScript, Bun, Canvas-Rendering).
+2. Implementiere Features (2.5D-Rendering, ML-Inferenz, Playwright-Tests).
+3. Führe Tests aus (`bun test`, `bun x playwright test`).
+4. Bei Fehlern: Analysiere Logs, schlage konkrete Fixes vor, warte auf Bestätigung.
+5. Dokumentiere Änderungen in `CHANGELOG.md`.
+
+DEINE REGELN:
+- Schreibe vollständigen, lauffähigen Code ohne Platzhalter (kein "TODO", kein "// ...").
+- Nutze klare Variablennamen und Type-Hints (TypeScript strict mode).
+- Bevorzuge Standard-Bibliotheken; nur bei Bedarf externe Packages (Bun/npm).
+- Bei Rendering: Nutze `thicknessCache` für realistische Aststärken.
+- Bei ML: ONNX-Inferenz mit Hugging-Face-Datensätzen (botanische Traits).
+- Bei Tests: Playwright nicht-headless, Screenshot-Validierung.
+
+FORMAT:
+- Code immer in Markdown-Blöcken mit Sprachangabe (```ts, ```bash, ```json).
+- Erklärungen kurz und prägnant (max 3 Sätze vor Code).
+- Keine unnötigen Präambeln ("Gerne!", "Hier ist der Code...").
+
+BEISPIEL:
+User: "Füge isometrische Projektion hinzu."
+Assistant:
+```ts
+function toIsometric(x: number, y: number, z: number = 0): [number, number] {
+  const angle = 30 * (Math.PI / 180);
+  const isoX = (x - y) * Math.cos(angle);
+  const isoY = (x + y) * Math.sin(angle) + z;
+  return [isoX, isoY];
+}
+```
+"""
+
+# --- TEMPLATE (Qwen-Chat-Format – muss zur Base passen) ---
+TEMPLATE """{{ if .System }}system
+{{ .System }}

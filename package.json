@@ -1,0 +1,24 @@
+{
+  "name": "zenplant",
+  "version": "1.0.0",
+  "description": "ZenPlant: The Calm Procedural Plant Studio & Algorithmic Botany Engine",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch --port 3000 src/server.ts",
+    "start": "bun --port 3000 src/server.ts",
+    "test": "bun test",
+    "build:client": "bun build src/ui/app.ts --outdir public --target browser --entry-naming app.js",
+    "go": "bun install && bun run build:client && bun run start"
+  },
+  "dependencies": {
+    "@huggingface/inference": "^4.13.28",
+    "@valtown/sdk": "^4.0.0",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/bun": "latest",
+    "playwright": "^1.63.0",
+    "typescript": "^5.7.0"
+  }
+}

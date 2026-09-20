@@ -1,1 +1,6 @@
 .env
+node_modules/
+dist/
+.omo/
+test-results/
+*.log

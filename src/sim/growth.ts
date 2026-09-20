@@ -14,6 +14,7 @@
  */
 
 import { createPrng, type Prng } from "./prng";
+import { expressTrait } from "./genetics";
 import type {
   Genome,
   PlantNode,
@@ -45,7 +46,15 @@ export function growOnce(
   const newState: PlantState = {
     ...state,
     step: state.step + 1,
-    nodes: state.nodes.map((n) => ({ ...n })),
+    nodes: [...state.nodes],
+  };
+
+  const clonedNodes = new Map<number, PlantNode>();
+  const getClone = (n: PlantNode): PlantNode => {
+    if (clonedNodes.has(n.id)) return clonedNodes.get(n.id)!;
+    const clone = { ...n };
+    clonedNodes.set(n.id, clone);
+    return clone;
   };
 
   const season = newState.step % DEFAULT_CYCLE_LENGTH;
@@ -73,7 +82,7 @@ export function growOnce(
   } else if (season >= 140) {
     seasonFactor = 1.0 - 0.7 * ((season - 140) / 40);
   }
-  const turnAmount = 0.05 * seasonFactor * (1 + newState.genome.vineMode * 2);
+  const turnAmount = 0.05 * seasonFactor * (1 + expressTrait(newState.genome, "vineMode") * 2);
 
   const currentWater = newState.resources?.water ?? 0;
   const droughtFactor = currentWater < 30 ? 0.4 + 0.6 * (currentWater / 30) : 1.0;
@@ -102,22 +111,31 @@ export function growOnce(
     newState.resources = { energy: 0, water: 0, structural: 0 };
   }
 
-  newState.nodes.forEach((n) => {
-    if (n.age !== undefined) n.age++;
-  });
-
-  newState.nodes.forEach((n) => {
-    if (n.type === "flower" && n.age > 60 && n.fruitAge === 0) {
-      n.fruitAge = 1;
-    } else if (n.fruitAge > 0) {
-      n.fruitAge++;
+  newState.nodes.forEach((n, i) => {
+    if (n.age !== undefined) {
+      const clone = getClone(n);
+      clone.age++;
+      newState.nodes[i] = clone;
     }
   });
 
-  const tips = newState.nodes.filter((n) => n.terminal && n.type === "meristem");
+  newState.nodes.forEach((n, i) => {
+    if (n.type === "flower" && n.age > 60 && n.fruitAge === 0) {
+      const clone = getClone(n);
+      clone.fruitAge = 1;
+      newState.nodes[i] = clone;
+    } else if (n.fruitAge > 0) {
+      const clone = getClone(n);
+      clone.fruitAge++;
+      newState.nodes[i] = clone;
+    }
+  });
+
+  const tips = newState.nodes.filter((n) => !n.isCut && n.terminal && (n.type === "meristem" || n.type === "stem"));
   const nextNodes: PlantNode[] = [];
 
   tips.forEach((tip) => {
+    if (tip.isCut) return;
     const g = newState.genome;
 
     let angle = tip.angle;
@@ -146,17 +164,26 @@ export function growOnce(
       angle = -Math.PI / 8;
     }
 
-    const vigor = g.vigor;
+    const vigor = expressTrait(g, "vigor") || 0.5;
     const currentV = tip.v;
 
     if (tip.length < tip.targetLength) {
-      const growthRate = vigor * 2.0 * (1 + g.vineMode * 0.3);
-      tip.length += growthRate * droughtFactor;
-      if (tip.length > tip.targetLength) tip.length = tip.targetLength;
+      const shadeFactor = Math.max(0.2, 1 - (tip.shade || 0));
+      const growthRate = (typeof vigor === "number" ? vigor : 0.5) * 2.0 * (1 + (expressTrait(g, "vineMode") || 0) * 0.3) * shadeFactor;
+      const clone = getClone(tip);
+      clone.length += growthRate * droughtFactor;
+      if (clone.length > clone.targetLength) clone.length = clone.targetLength;
+      
+      // Update the node in the array
+      const idx = newState.nodes.indexOf(tip);
+      if (idx !== -1) newState.nodes[idx] = clone;
       return;
     }
 
-    tip.terminal = false;
+    const tipClone = getClone(tip);
+    tipClone.terminal = false;
+    const tIdx = newState.nodes.indexOf(tip);
+    if (tIdx !== -1) newState.nodes[tIdx] = tipClone;
 
     const safeV = Math.max(0, currentV);
     const tipEndX = tip.x + Math.cos(tip.angle) * tip.targetLength;
@@ -173,8 +200,8 @@ export function growOnce(
         type: "flower",
         terminal: true,
         age: 0,
-        length: g.flowerRadius,
-        targetLength: g.flowerRadius,
+        length: expressTrait(g, "flowerRadius"),
+        targetLength: expressTrait(g, "flowerRadius"),
         v: 0,
         budState: "dormant",
         isCut: false,
@@ -195,20 +222,21 @@ export function growOnce(
     const energyFactor = Math.min(1.5, Math.max(0.5, (newState.resources?.energy ?? 0) / 60));
     const densityRatio = newState.nodes.length / MAX_TOTAL_NODES;
     const densityBrake = Math.max(0, (1 - densityRatio) * (1 - densityRatio));
-    const apicalBrake = 1 / (1 + g.apicalDominance * tip.depth * 0.15);
+    const apicalBrake = 1 / (1 + expressTrait(g, "apicalDominance") * tip.depth * 0.15);
     const competitionBrake = 30 / (30 + tips.length * 0.5);  // Stricter competition brake
-    const branchChance = safeV * 0.4 * energyFactor * densityBrake * apicalBrake * competitionBrake;
+    const shadeFactor = Math.max(0.2, 1 - tip.shade);
+    const branchChance = safeV * 0.4 * energyFactor * densityBrake * apicalBrake * competitionBrake * shadeFactor;
     const nBranches = prng.random() < branchChance ? 2 : 1;
 
     for (let b = 0; b < nBranches; b++) {
-      const spread = (g.angle * Math.PI) / 180 * Math.max(0.3, 1 - g.vineMode * 0.7);
+      const spread = (expressTrait(g, "angle") * Math.PI) / 180 * Math.max(0.3, 1 - expressTrait(g, "vineMode") * 0.7);
       const direction = nBranches === 1 ? (prng.random() - 0.5) * 0.2 : (b === 0 ? -spread : spread);
       let nextAngle = normalizeAngle(angle + direction);
       if (nextAngle > 0) nextAngle = 0;
       if (nextAngle < -Math.PI) nextAngle = -Math.PI;
 
-      const daughterV = safeV - (g.decay + prng.random() * g.decay * 0.5);
-      const daughterTargetLen = g.lenScale * Math.pow(Math.max(0, daughterV), 1.2) * (1 + g.vineMode * 0.5);
+      const daughterV = safeV - (expressTrait(g, "decay") + prng.random() * expressTrait(g, "decay") * 0.5);
+      const daughterTargetLen = expressTrait(g, "lenScale") * Math.pow(Math.max(0, daughterV), 1.2) * (1 + expressTrait(g, "vineMode") * 0.5);
 
       nextNodes.push({
         id: -((newState.idCounter++) * 100 + b),
@@ -227,11 +255,11 @@ export function growOnce(
         isCut: false,
         resourceProduction: 0,
         shade: tip.shade,
-        curve: (prng.random() - 0.5) * g.curl * 0.6,
+        curve: (prng.random() - 0.5) * expressTrait(g, "curl") * 0.6,
         leafSizeJitter: 0,
         leafShapeJitter: 0,
         leafHueShift: 0,
-        hasThorns: g.thornDensity > 0 && prng.random() < g.thornDensity && tip.depth >= 1,
+        hasThorns: expressTrait(g, "thornDensity") > 0 && prng.random() < expressTrait(g, "thornDensity") && tip.depth >= 1,
         fruitAge: 0,
         fallState: "attached",
         fallSeed: prng.random(),
@@ -279,7 +307,7 @@ export function growOnce(
         terminal: false,
         age: 0,
         length: 0,
-        targetLength: g.lenScale * 0.8,
+        targetLength: expressTrait(g, "lenScale") * 0.8,
         v: safeV,
         budState: "dormant",
         isCut: false,
@@ -307,12 +335,14 @@ export function growOnce(
       leafCountByParent.set(n.parentId, (leafCountByParent.get(n.parentId) ?? 0) + 1);
     }
   }
-  for (const n of newState.nodes) {
-    if (n.type === "root" || n.parentId === null) continue;
+  newState.nodes.forEach((n, i) => {
+    if (n.type === "root" || n.parentId === null) return;
     const leavesOnParent = leafCountByParent.get(n.parentId) ?? 0;
     const leafSiblings = n.type === "leaf" ? Math.max(0, leavesOnParent - 1) : leavesOnParent;
-    n.shade = Math.min(0.85, n.shade + leafSiblings * 0.06);
-  }
+    const clone = getClone(n);
+    clone.shade = Math.min(0.85, clone.shade + leafSiblings * 0.06);
+    newState.nodes[i] = clone;
+  });
 
   let totalResources = 0;
   newState.nodes.forEach((n) => {
@@ -356,17 +386,17 @@ function budActivation(state: PlantState, prng: Prng): void {
   const densityBrakeAwake = Math.max(0, 1 - nodes.length / MAX_TOTAL_NODES);
   nodes.forEach((n) => {
     if (n.type !== "bud" || n.budState !== "dormant") return;
-    if (n.v < g.budActivationThreshold) return;
-    const activationChance = (1 - g.dormancyStrength) * (0.35 + 0.65 * n.v) * (0.25 + 0.75 * densityBrakeAwake);
+    if (n.v < expressTrait(g, "budActivationThreshold")) return;
+    const activationChance = (1 - expressTrait(g, "dormancyStrength")) * (0.35 + 0.65 * n.v) * (0.25 + 0.75 * densityBrakeAwake);
     if (prng.random() < activationChance) {
       const parent = n.parentId !== null ? parentById.get(n.parentId) : undefined;
       const parentV = parent ? Math.max(0, parent.v) : n.v;
-      const inheritedV = Math.max(0.15, parentV - g.decay * (1 + prng.random() * 0.5));
+      const inheritedV = Math.max(0.15, parentV - expressTrait(g, "decay") * (1 + prng.random() * 0.5));
       n.type = "meristem";
       n.terminal = true;
       n.budState = "active";
       n.v = inheritedV;
-      n.targetLength = g.lenScale * Math.pow(inheritedV, 1.2);
+      n.targetLength = expressTrait(g, "lenScale") * Math.pow(inheritedV, 1.2);
       n.length = 0;
       n.age = 0;
     }
@@ -399,7 +429,7 @@ function budActivation(state: PlantState, prng: Prng): void {
       terminal: false,
       age: 0,
       length: 0,
-      targetLength: g.lenScale * 0.6,
+      targetLength: expressTrait(g, "lenScale") * 0.6,
       v: 0.6 + prng.random() * 0.4,
       budState: "dormant",
       isCut: false,
@@ -458,13 +488,13 @@ function spawnLeavesOnBranches(state: PlantState, prng: Prng): void {
   nodes.forEach((n) => {
     if (n.type !== "stem" && n.type !== "meristem") return;
     if (n.isCut) return;
-    if (n.depth < 3) return;  // Was: n.depth < 2
-    if (n.age < 10) return;
+    if (n.depth < 1) return;  // Allow leaves on all branch depths
+    if (n.age < 2) return;
     const hasLeafChild = nodes.some(
       (c) => c.parentId === n.id && c.type === "leaf"
     );
     if (hasLeafChild) return;
-    if (prng.random() > g.leafDensity * 0.3) return;
+    if (prng.random() > expressTrait(g, "leafDensity") * 0.95) return; // High probability of dense, stable foliage
 
     const endX = n.x + Math.cos(n.angle) * n.length;
     const endY = n.y + Math.sin(n.angle) * n.length;
@@ -475,7 +505,7 @@ function spawnLeavesOnBranches(state: PlantState, prng: Prng): void {
       parentId: n.id,
       x: endX,
       y: endY,
-      angle: n.angle + side * 1.3,
+      angle: n.angle + (prng.random() - 0.5) * 0.8,
       depth: n.depth + 1,
       type: "leaf",
       terminal: false,
@@ -541,7 +571,7 @@ export function budbreakStep(state: PlantState, prng: Prng): void {
     n.budState = "active";
     n.v = 0.75 + prng.random() * 0.35;
     n.length = 0;
-    n.targetLength = state.genome.lenScale * 1.3;
+    n.targetLength = expressTrait(state.genome, "lenScale") * 1.3;
     n.age = 0;
   }
 }
@@ -566,7 +596,7 @@ export function epicormicStep(state: PlantState, prng: Prng): void {
       terminal: false,
       age: 0,
       length: 0,
-      targetLength: state.genome.lenScale * 0.6,
+      targetLength: expressTrait(state.genome, "lenScale") * 0.6,
       v: 0.6 + prng.random() * 0.4,
       budState: "dormant",
       isCut: false,
@@ -603,69 +633,74 @@ function senesceLeaves(state: PlantState): void {
  * @param targetNodeId ID of the stem node to prune
  * @returns New plant state with subtree removed and buds potentially awakened
  */
-export function pruneNode(state: PlantState, targetNodeId: number): PlantState {
-  // Deep copy to avoid mutation
+/**
+ * Cut a stem at fraction `t` along its length (0 = base, 1 = tip).
+ * The internodal wood is shortened to the cut; only distal children are removed.
+ */
+export function pruneNodeAt(state: PlantState, targetNodeId: number, t: number): PlantState {
   const newState: PlantState = {
     ...state,
     nodes: state.nodes.map((n) => ({ ...n })),
   };
 
-  // Find the target node
   const targetIndex = newState.nodes.findIndex((n) => n.id === targetNodeId);
-  if (targetIndex === -1) return state; // target not found, return unchanged
+  if (targetIndex === -1) return state;
 
   const targetNode = newState.nodes[targetIndex];
+  if (targetNode.type !== "stem" && targetNode.type !== "meristem") return state;
 
-  // Build set of descendant IDs to remove (children, grandchildren, etc.)
-  // but NOT the target node itself
+  const cutT = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 1;
+  const originalLength = Math.max(0, targetNode.length);
+  const minStub = Math.min(originalLength, 0.4);
+  targetNode.length = Math.max(minStub, originalLength * cutT);
+  targetNode.targetLength = targetNode.length;
+  targetNode.isCut = true;
+  targetNode.terminal = false;
+  targetNode.v = 0;
+  if (targetNode.type === "meristem") targetNode.type = "stem";
+
   const toRemove = new Set<number>();
   function findDescendants(id: number): void {
-    newState.nodes.forEach((n) => {
-      if (n.parentId === id) {
+    for (const n of newState.nodes) {
+      if (n.parentId === id && !toRemove.has(n.id)) {
         toRemove.add(n.id);
         findDescendants(n.id);
       }
-    });
+    }
   }
 
-  // Mark all descendants of the target for removal
-  findDescendants(targetNodeId);
+  for (const n of newState.nodes) {
+    if (n.parentId !== targetNodeId) continue;
+    const attachT = n.attachT ?? 1;
+    if (attachT >= cutT - 1e-6) {
+      toRemove.add(n.id);
+      findDescendants(n.id);
+    } else if (originalLength > 1e-6) {
+      n.attachT = attachT / Math.max(cutT, 1e-6);
+    }
+  }
 
-  // Mark the target node as cut (keep it, don't remove it)
-  targetNode.isCut = true;
-
-  // Remove all marked descendant nodes only
   newState.nodes = newState.nodes.filter((n) => !toRemove.has(n.id));
 
-  // Awaken latent buds near the cut area.
-  // Buds that were siblings to the pruned branch, or at the parent level,
-  // can awaken to replace the removed growth.
-  newState.nodes.forEach((n) => {
-    if (n.type === "bud" && n.budState === "dormant") {
-      // A bud awakens if it's a sibling of a removed descendant
-      // (shares the same parent as a removed node)
-      const isSiblingOfRemoved =
-        n.parentId !== null &&
-        toRemove.has(n.parentId) &&
-        n.parentId === targetNode.parentId;
+  for (const n of newState.nodes) {
+    if (n.parentId !== targetNodeId) continue;
+    if (n.type !== "bud" || n.budState !== "dormant") continue;
+    n.type = "meristem";
+    n.terminal = true;
+    n.budState = "active";
+    n.v = Math.max(0.4, expressTrait(state.genome, "vigor") * 0.7);
+    n.targetLength = expressTrait(state.genome, "lenScale") * 0.9;
+    n.length = 0;
+    n.age = 0;
+  }
 
-      if (isSiblingOfRemoved) {
-        // Activate this bud into a stem
-        n.type = "meristem";
-        n.terminal = true;
-        n.budState = "active";
-        n.v = 1.0;
-        n.targetLength = state.genome.lenScale * 1.5;
-        n.length = 0;
-        n.age = 0;
-      }
-    }
-  });
-
-  // Update step counter to mark the pruning event
   newState.step++;
-
+  newState.cutAnimTime = 1.0;
   return newState;
+}
+
+export function pruneNode(state: PlantState, targetNodeId: number): PlantState {
+  return pruneNodeAt(state, targetNodeId, 1);
 }
 
 // --- Initial State Setup ---
@@ -694,7 +729,7 @@ export function freshState(
     y: 0,
     angle: -Math.PI / 2,
     length: 0,
-    targetLength: genome.lenScale,
+    targetLength: expressTrait(genome, "lenScale"),
     v: 1.0,
     age: 0,
     terminal: true,
@@ -718,7 +753,7 @@ export function freshState(
     root,
     nodes: [root],
     genome,
-    species,
+    speciesId: species.id,
     resources: { energy: 50, water: 80, structural: 30 },
     environment: {
       lightDirection: [1, 0],

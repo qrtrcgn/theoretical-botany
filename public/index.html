@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ZenPlant — Calm Procedural Plant Studio</title>
+<style>
+:root{
+  --bg:#fcfaf7;
+  --panel:#f3f0eb;
+  --ink:#4a443f;
+  --muted:#8c857d;
+  --line:#dcd6cc;
+  --accent-green:#7c9473;
+  --accent-gold:#d4a373;
+  --accent-pink:#e5989b;
+  --dark-bg:#1a1c1e;
+  --dark-panel:#25282c;
+  --dark-ink:#e0e0e0;
+  --dark-line:#3a3d41;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  margin:0;min-height:100dvh;color:var(--ink);background:var(--bg);
+  font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow:hidden;overscroll-behavior:none;
+  transition: background 0.5s ease, color 0.5s ease;
+}
+body.dark-mode{
+  background:var(--dark-bg);
+  color:var(--dark-ink);
+}
+.app{display:flex;flex-direction:column;min-height:100dvh}
+.stage{position:relative;padding:20px;display:flex;flex-direction:column;height:60dvh;min-height:300px}
+.canvas-wrap{
+  position:relative;flex-grow:1;border:1px solid var(--line);
+  border-radius:20px;background:var(--bg);overflow:hidden;
+  cursor:crosshair;touch-action:none;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+  transition: background 0.5s ease;
+}
+body.dark-mode .canvas-wrap{background:var(--dark-bg); border-color: var(--dark-line);}
+canvas{display:block;width:100%;height:100%}
+.rail{
+  padding:24px;border-top:1px solid var(--line);
+  background:var(--panel);overflow-y:auto;flex:1 1 auto;
+  transition: background 0.5s ease, border-color 0.5s ease;
+}
+body.dark-mode .rail{background:var(--dark-panel); border-color: var(--dark-line);}
+@media (min-width:880px){
+  .app{flex-direction:row;height:100dvh}
+  .stage{height:auto;flex-grow:1;padding:30px}
+  .rail{width:380px;flex:0 0 380px;border-top:none;border-left:1px solid var(--line);max-height:100dvh}
+}
+button{
+  width:100%;padding:12px;background:var(--accent-green);color:#fff;
+  border:none;border-radius:12px;cursor:pointer;font-weight:500;
+  margin-bottom:12px;font-family:inherit;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+button:hover{filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15);}
+button:active{transform: translateY(0);}
+.overlay{position:absolute;top:30px;left:30px;pointer-events:none; z-index: 10;}
+.overlay h1{margin:0;font-size:24px;font-weight:300;color:var(--ink); letter-spacing: -0.5px;}
+body.dark-mode .overlay h1{color: var(--dark-ink);}
+.overlay p{margin:8px 0 0;color:var(--muted);font-size:14px;font-style: italic;}
+.season-badge{
+  display:block;padding:10px;background:var(--line);
+  border-radius:12px;font-size:14px;font-weight:500;
+  margin-bottom:20px;width:100%;text-align:center;
+  transition: all 0.3s ease;
+}
+body.dark-mode .season-badge{background: var(--dark-line); color: var(--dark-ink);}
+.genome-info{
+  font-size:12px;color:var(--muted);background:rgba(0,0,0,0.03);
+  padding:15px;border-radius:12px;margin-bottom:20px;
+  border:1px solid var(--line);line-height:1.6;
+}
+body.dark-mode .genome-info{background:rgba(0,0,0,0.2); border-color: var(--dark-line); color: var(--dark-ink);}
+#greenhouse{border-top:1px solid var(--line);padding-top:20px;margin-top:20px}
+.slot{
+  font-size:13px;padding:12px;background:var(--bg);
+  border-radius:12px;margin-bottom:10px;display:flex;
+  align-items:center;justify-content:space-between;
+  border:1px solid var(--line);cursor:pointer;
+  transition: all 0.2s ease;
+}
+body.dark-mode .slot{background: var(--dark-bg); border-color: var(--dark-line);}
+.slot:hover{border-color: var(--accent-green); background: rgba(124,148,115,0.05);}
+.slot.selected{border-color:var(--accent-green);background:rgba(124,148,115,0.1)}
+.slot-color{width:16px;height:16px;border-radius:50%;display:inline-block; box-shadow: 0 0 4px rgba(0,0,0,0.2);}
+select{
+  width:100%;padding:12px;margin-bottom:12px;background:var(--bg);
+  color:var(--ink);border:1px solid var(--line);
+  border-radius:12px;font-family:inherit;
+  transition: all 0.2s ease;
+}
+body.dark-mode select{background: var(--dark-bg); color: var(--dark-ink); border-color: var(--dark-line);}
+#pro-panel{display:none;border:1px solid var(--line);border-radius:12px;padding:15px;margin-top:15px}
+body.dark-mode #pro-panel{border-color: var(--dark-line);}
+</style>
+</head>
+<body>
+<main class="app">
+<section class="stage">
+<div class="canvas-wrap">
+<canvas id="plant"></canvas>
+<div class="overlay"><h1>ZenPlant — Calm Procedural Plant Studio</h1><p>Click a branch to prune it. Breathe.</p></div>
+</div>
+</section>
+<aside class="rail">
+<div id="season-badge" class="season-badge">Spring</div>
+<div style="display:flex;gap:8px">
+<button id="btn-grow">Grow +10</button>
+<button id="btn-grow-season" style="background:#10b981;color:#064e3b">+50</button>
+<button id="btn-play">Pause</button>
+</div>
+<div style="display:flex;align-items:center;gap:8px;margin:8px 0">
+<span style="font-size:11px;color:#94a3b8">Speed</span>
+<input type="range" id="grow-speed" min="0" max="5" step="0.5" value="1" style="flex:1">
+<span id="speed-label" style="font-size:11px;color:#94a3b8;width:24px">1×</span>
+</div>
+<!-- species-select removed for discovery system -->
+<h2 style="margin:15px 0 10px;font-size:16px">Genome</h2>
+<div class="genome-info" id="genome-info">Loading…</div>
+<button id="btn-reset" style="background:#475569">Random seed</button>
+<div id="greenhouse">
+<h3 style="margin:0 0 10px;font-size:13px;color:#cbd5e1">Greenhouse</h3>
+<button id="btn-save" style="background:#8b5cf6">Save current plant</button>
+<div id="slots-container"></div>
+<button id="btn-breed" style="background:#ec4899;display:none;margin-top:10px">Breed</button>
+</div>
+<button id="btn-pro" style="background:#0f172a;border:1px solid #334155;margin-top:15px">Developer mode</button>
+<div style="display:flex;gap:8px;margin-top:10px">
+<button id="btn-dark" style="background:#1e293b;font-size:11px;padding:6px">Dark/Light</button>
+<button id="btn-wood" style="background:#1e293b;font-size:11px;padding:6px">Wood: OFF</button>
+<button id="btn-wind" style="background:#1e293b;font-size:11px;padding:6px">Wind: OFF</button>
+</div>
+<div id="pro-panel">
+<button id="btn-export" style="background:#0ea5e9">Export plant JSON</button>
+<button id="btn-svg" style="background:#0ea5e9">Export SVG</button>
+<button id="btn-png" style="background:#0ea5e9">Export PNG</button>
+<button id="btn-timelapse" style="background:#0ea5e9">Record Timelapse</button>
+<button id="btn-import" style="background:#0ea5e9">Import JSON</button>
+<input type="file" id="import-file" accept="application/json" style="display:none"/>
+</div>
+</aside>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
