@@ -41,6 +41,16 @@ export interface PlantNode {
   fallAge?: number;
   leafShape?: number;
   sizeMul?: number;
+  hasWire?: boolean;
+  wireAngleOffset?: number;
+  wireCurvature?: number;
+  barkFracture?: number;
+  isBroken?: boolean;
+  breakAngle?: number;
+  breakSplinters?: number[];
+  callusStage?: number;
+  isJin?: boolean;
+  jinStage?: number;
 }
 
 export interface Genome {
@@ -158,4 +168,23 @@ export interface PlantState {
   growSpeed: number;
   timelapseFrames: string[];
   isRecording: boolean;
+  soilMoisture?: number;
+  fallenDebris?: Array<{ x: number; y: number; rot: number; color: string; size?: number; type?: "petal" | "leaf" }>;
+  sandRipples?: Array<{ x: number; y: number; radius: number; intensity: number }>;
+  mossPatches?: Array<{ x: number; y: number; rx: number; ry: number; color: string }>;
+  weather?: "clear" | "komorebi" | "rain" | "twilight";
+  potStyle?: "classic" | "yixing" | "oribe" | "tenmoku" | "kurama";
+  shishiWater?: number;
+  isTokonoma?: boolean;
+  timeSpeed?: number;
+  sandFurrows?: Array<{ x: number; y: number; angle: number; width: number; depth: number }>;
+  sapDrops?: Array<{ x: number; y: number; size: number; alpha: number; vy: number }>;
+  barkFlakes?: Array<{ x: number; y: number; vx: number; vy: number; rot: number; size: number; alpha: number }>;
+  woodShavings?: Array<{ x: number; y: number; vx: number; vy: number; rot: number; size: number; alpha: number }>;
+  unlockedRewards?: string[];
+  activeAccoutrements?: { scrollId?: string; accentId?: string };
+  lastRecognizedStyle?: string;
+  lastStyleScore?: number;
+  tokonomaParticles?: Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; size: number; alpha: number; type: "smoke" | "glow" }>;
 }
+

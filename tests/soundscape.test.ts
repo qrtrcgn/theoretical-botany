@@ -48,7 +48,7 @@ if (!(global as unknown as { window: { AudioContext?: unknown } }).window.AudioC
     createOscillator() {
       return {
         type: "sine",
-        frequency: { value: 440, setValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} },
+        frequency: { value: 440, setValueAtTime: () => {}, linearRampToValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} },
         connect: () => {},
         start: () => {},
         stop: () => {}

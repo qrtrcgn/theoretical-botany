@@ -35,8 +35,18 @@ export function renderLeafVenation(ctx: CanvasRenderingContext2D, size: number, 
   ctx.restore();
 }
 
-export function renderWoodBarkTexture(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, thick: number, woodiness: number): void {
-  if (thick < 2.0) return;
+export function renderWoodBarkTexture(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  thick: number,
+  woodiness: number,
+  cx?: number,
+  cy?: number
+): void {
+  if (thick < 2.0 || woodiness <= 0) return;
   ctx.save();
   ctx.strokeStyle = `rgba(30, 15, 5, ${0.35 * woodiness})`;
   ctx.lineWidth = Math.max(0.5, thick * 0.15);
@@ -52,17 +62,31 @@ export function renderWoodBarkTexture(ctx: CanvasRenderingContext2D, x1: number,
 
   const nx = -dy / len;
   const ny = dx / len;
+  const off = thick * 0.3;
 
-  // Longitudinal fissured bark grooves (characteristic of mature bonsai bark)
-  ctx.beginPath();
-  ctx.moveTo(x1 + nx * thick * 0.3, y1 + ny * thick * 0.3);
-  ctx.lineTo(x2 + nx * thick * 0.3, y2 + ny * thick * 0.3);
-  ctx.stroke();
+  if (cx !== undefined && cy !== undefined) {
+    // Longitudinal fissured bark grooves along quadratic bezier curvature
+    ctx.beginPath();
+    ctx.moveTo(x1 + nx * off, y1 + ny * off);
+    ctx.quadraticCurveTo(cx + nx * off, cy + ny * off, x2 + nx * off, y2 + ny * off);
+    ctx.stroke();
 
-  ctx.beginPath();
-  ctx.moveTo(x1 - nx * thick * 0.3, y1 - ny * thick * 0.3);
-  ctx.lineTo(x2 - nx * thick * 0.3, y2 - ny * thick * 0.3);
-  ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x1 - nx * off, y1 - ny * off);
+    ctx.quadraticCurveTo(cx - nx * off, cy - ny * off, x2 - nx * off, y2 - ny * off);
+    ctx.stroke();
+  } else {
+    // Linear fissured bark grooves
+    ctx.beginPath();
+    ctx.moveTo(x1 + nx * off, y1 + ny * off);
+    ctx.lineTo(x2 + nx * off, y2 + ny * off);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(x1 - nx * off, y1 - ny * off);
+    ctx.lineTo(x2 - nx * off, y2 - ny * off);
+    ctx.stroke();
+  }
 
   ctx.restore();
 }

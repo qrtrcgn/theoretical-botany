@@ -1,152 +1,1058 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>ZenPlant — Calm Procedural Plant Studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+<title>ZenPlant — Achtsamer Bonsai & Botanik Garten</title>
 <style>
-:root{
-  --bg:#fcfaf7;
-  --panel:#f3f0eb;
-  --ink:#4a443f;
-  --muted:#8c857d;
-  --line:#dcd6cc;
-  --accent-green:#7c9473;
-  --accent-gold:#d4a373;
-  --accent-pink:#e5989b;
-  --dark-bg:#1a1c1e;
-  --dark-panel:#25282c;
-  --dark-ink:#e0e0e0;
-  --dark-line:#3a3d41;
+:root {
+  --bg: #fcfaf7;
+  --panel: #f5f2eb;
+  --ink: #383431;
+  --muted: #8c857d;
+  --line: #e3ded5;
+  --accent-green: #608058;
+  --accent-gold: #c8955a;
+  --accent-ruby: #e06c75;
+  --accent-water: #38bdf8;
+  --accent-wire: #d97706;
+  --glass: rgba(252, 250, 247, 0.82);
+  --glass-border: rgba(227, 222, 213, 0.8);
+  
+  --dark-bg: #0f141c;
+  --dark-panel: #18202c;
+  --dark-ink: #e2e8f0;
+  --dark-muted: #94a3b8;
+  --dark-line: #263346;
+  --dark-glass: rgba(15, 20, 28, 0.85);
+  --dark-glass-border: rgba(38, 51, 70, 0.8);
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%}
-body{
-  margin:0;min-height:100dvh;color:var(--ink);background:var(--bg);
-  font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  overflow:hidden;overscroll-behavior:none;
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; width: 100%; margin: 0; padding: 0; }
+body {
+  min-height: 100dvh; color: var(--ink); background: var(--bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+  overflow: hidden; overscroll-behavior: none;
   transition: background 0.5s ease, color 0.5s ease;
 }
-body.dark-mode{
-  background:var(--dark-bg);
-  color:var(--dark-ink);
+
+body.dark-mode {
+  background: var(--dark-bg);
+  color: var(--dark-ink);
 }
-.app{display:flex;flex-direction:column;min-height:100dvh}
-.stage{position:relative;padding:20px;display:flex;flex-direction:column;height:60dvh;min-height:300px}
-.canvas-wrap{
-  position:relative;flex-grow:1;border:1px solid var(--line);
-  border-radius:20px;background:var(--bg);overflow:hidden;
-  cursor:crosshair;touch-action:none;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-  transition: background 0.5s ease;
+
+.app {
+  position: relative; width: 100vw; height: 100dvh; display: flex; flex-direction: column;
 }
-body.dark-mode .canvas-wrap{background:var(--dark-bg); border-color: var(--dark-line);}
-canvas{display:block;width:100%;height:100%}
-.rail{
-  padding:24px;border-top:1px solid var(--line);
-  background:var(--panel);overflow-y:auto;flex:1 1 auto;
-  transition: background 0.5s ease, border-color 0.5s ease;
+
+/* Zen Viewport Stage */
+.stage {
+  position: relative; width: 100%; height: 100%; flex: 1; overflow: hidden;
 }
-body.dark-mode .rail{background:var(--dark-panel); border-color: var(--dark-line);}
-@media (min-width:880px){
-  .app{flex-direction:row;height:100dvh}
-  .stage{height:auto;flex-grow:1;padding:30px}
-  .rail{width:380px;flex:0 0 380px;border-top:none;border-left:1px solid var(--line);max-height:100dvh}
+
+canvas {
+  display: block; width: 100%; height: 100%; touch-action: none;
 }
-button{
-  width:100%;padding:12px;background:var(--accent-green);color:#fff;
-  border:none;border-radius:12px;cursor:pointer;font-weight:500;
-  margin-bottom:12px;font-family:inherit;
+
+/* Floating Top Zen HUD */
+.zen-top-bar {
+  position: absolute; top: env(safe-area-inset-top, 16px); left: 16px; right: 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  pointer-events: none; z-index: 30;
+}
+
+.zen-title-pill {
+  pointer-events: auto;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 999px;
+  background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+}
+body.dark-mode .zen-title-pill {
+  background: var(--dark-glass); border-color: var(--dark-glass-border);
+}
+
+.zen-title-pill h1 {
+  margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.2px;
+}
+.zen-species-tag {
+  font-size: 12px; color: var(--muted); font-style: italic;
+}
+body.dark-mode .zen-species-tag { color: var(--dark-muted); }
+
+.zen-species-select {
+  font-size: 12px; font-weight: 500; color: var(--ink);
+  background: transparent; border: 1px solid var(--glass-border);
+  border-radius: 999px; padding: 2px 8px; cursor: pointer;
+  outline: none; transition: all 0.2s ease;
+}
+.zen-species-select option {
+  background: var(--panel); color: var(--ink);
+}
+body.dark-mode .zen-species-select {
+  color: var(--dark-ink); border-color: var(--dark-glass-border);
+}
+body.dark-mode .zen-species-select option {
+  background: var(--dark-panel); color: var(--dark-ink);
+}
+.zen-species-select:hover {
+  border-color: var(--accent-green);
+}
+
+.top-actions {
+  pointer-events: auto; display: flex; gap: 8px;
+}
+
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  color: var(--ink); cursor: pointer; font-size: 16px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0;
+}
+body.dark-mode .icon-btn {
+  background: var(--dark-glass); border-color: var(--dark-glass-border); color: var(--dark-ink);
+}
+.icon-btn:hover {
+  transform: translateY(-2px); filter: brightness(1.08);
+}
+.icon-btn:active {
+  transform: translateY(0);
+}
+.icon-btn.pill-btn {
+  width: auto; min-width: 52px; border-radius: 999px; padding: 0 10px; font-size: 12px; font-weight: 600;
+}
+
+/* Serene Hint Pill */
+.zen-hint-wrap {
+  position: absolute; top: calc(env(safe-area-inset-top, 16px) + 54px); left: 0; right: 0;
+  display: flex; justify-content: center; pointer-events: none; z-index: 25;
+}
+.zen-hint {
+  padding: 6px 14px; border-radius: 999px; font-size: 12px;
+  background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border); color: var(--muted);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+body.dark-mode .zen-hint {
+  background: var(--dark-glass); border-color: var(--dark-glass-border); color: var(--dark-muted);
+}
+
+/* Floating Bottom Zen Dock */
+.zen-dock-wrap {
+  position: absolute; bottom: calc(env(safe-area-inset-bottom, 16px) + 12px); left: 0; right: 0;
+  display: flex; justify-content: center; pointer-events: none; z-index: 30;
+}
+
+.zen-dock {
+  pointer-events: auto; display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-radius: 26px;
+  background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
+}
+body.dark-mode .zen-dock {
+  background: var(--dark-glass); border-color: var(--dark-glass-border);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+.dock-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 58px; height: 54px; border-radius: 18px; border: none;
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0; margin: 0;
+}
+body.dark-mode .dock-btn { color: var(--dark-muted); }
+
+.dock-btn .dock-icon {
+  font-size: 20px; margin-bottom: 2px; transition: transform 0.2s ease;
+}
+.dock-btn .dock-label {
+  font-size: 10px; font-weight: 600; letter-spacing: -0.1px;
+}
+
+.dock-btn:hover {
+  background: rgba(0,0,0,0.04); color: var(--ink); transform: translateY(-2px);
+}
+body.dark-mode .dock-btn:hover {
+  background: rgba(255,255,255,0.06); color: var(--dark-ink);
+}
+
+.dock-btn.active {
+  background: var(--accent-green); color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(96, 128, 88, 0.4);
+  transform: translateY(-3px);
+}
+.dock-btn.active .dock-icon { transform: scale(1.1); }
+
+.btn-tokonoma-exit {
+  position: absolute; top: env(safe-area-inset-top, 20px); right: 20px;
+  padding: 8px 18px; border-radius: 999px;
+  background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border); color: var(--ink);
+  font-size: 12px; font-weight: 600; cursor: pointer; z-index: 50;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1); transition: all 0.2s ease;
+}
+body.dark-mode .btn-tokonoma-exit {
+  background: var(--dark-glass); border-color: var(--dark-glass-border); color: var(--dark-ink);
+}
+body.tokonoma-mode .zen-top-bar,
+body.tokonoma-mode .zen-hint-wrap,
+body.tokonoma-mode .zen-dock-wrap {
+  display: none !important;
+}
+body.tokonoma-mode #btn-tokonoma-exit {
+  display: inline-flex !important;
+}
+
+/* Off-canvas Studio Drawer */
+.drawer-backdrop {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 40;
+}
+.drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+
+.rail {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 380px; max-width: 90vw;
+  background: var(--panel); border-left: 1px solid var(--line);
+  box-shadow: -8px 0 30px rgba(0,0,0,0.15);
+  transform: translateX(100%); transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow-y: auto; z-index: 50; padding: 22px;
+  display: flex; flex-direction: column;
+}
+body.dark-mode .rail {
+  background: var(--dark-panel); border-color: var(--dark-line);
+}
+.rail.open { transform: translateX(0); }
+
+.drawer-header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
+}
+.drawer-header h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.close-btn {
+  background: transparent; border: none; font-size: 20px; cursor: pointer;
+  color: var(--muted); padding: 4px 8px; width: auto; box-shadow: none;
+}
+body.dark-mode .close-btn { color: var(--dark-muted); }
+
+/* Standard buttons inside drawer */
+button.standard-btn, .rail button {
+  width: 100%; padding: 10px 12px; background: var(--accent-green); color: #fff;
+  border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 13px;
+  margin-bottom: 8px; font-family: inherit; transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+}
+.rail button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.btn-row button { flex: 1; margin-bottom: 0; }
+
+.season-badge {
+  display: block; padding: 10px; background: var(--line); border-radius: 10px;
+  font-size: 14px; font-weight: 600; margin-bottom: 14px; width: 100%; text-align: center;
+}
+body.dark-mode .season-badge { background: var(--dark-line); color: var(--dark-ink); }
+
+.genome-info {
+  font-size: 12px; color: var(--muted); background: rgba(0,0,0,0.03);
+  padding: 12px; border-radius: 10px; margin-bottom: 14px;
+  border: 1px solid var(--line); line-height: 1.6;
+}
+body.dark-mode .genome-info { background: rgba(0,0,0,0.2); border-color: var(--dark-line); color: var(--dark-ink); }
+
+.control-card {
+  border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 14px;
+  background: rgba(0,0,0,0.02);
+}
+body.dark-mode .control-card { border-color: var(--dark-line); background: rgba(0,0,0,0.15); }
+.control-card h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+
+.dev-field {
+  display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center;
+  margin-top: 8px; color: var(--muted); font-size: 12px;
+}
+.dev-field input[type="range"] { grid-column: 1 / -1; margin: 2px 0 6px; }
+.dev-field output { font-weight: 600; color: var(--accent-gold); text-align: right; }
+
+.check-row {
+  display: flex; align-items: center; gap: 8px; min-height: 30px; color: var(--muted); font-size: 12px;
+}
+.check-row input { accent-color: var(--accent-gold); width: 16px; height: 16px; }
+
+#greenhouse { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+.slot {
+  font-size: 12px; padding: 10px; background: var(--bg); border-radius: 10px; margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: space-between;
+  border: 1px solid var(--line); cursor: pointer; transition: all 0.2s ease;
+}
+body.dark-mode .slot { background: var(--dark-bg); border-color: var(--dark-line); }
+.slot:hover { border-color: var(--accent-green); background: rgba(96, 128, 88, 0.05); }
+.slot.selected { border-color: var(--accent-green); background: rgba(96, 128, 88, 0.12); }
+.slot-color { width: 14px; height: 14px; border-radius: 50%; display: inline-block; box-shadow: 0 0 4px rgba(0,0,0,0.2); }
+
+#pro-panel { display: none; border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 12px; }
+body.dark-mode #pro-panel { border-color: var(--dark-line); }
+
+/* Guided Breathing Modal Overlay */
+.breathe-overlay {
+  position: fixed; inset: 0; background: rgba(10, 15, 22, 0.72); backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; z-index: 60;
+  opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+}
+.breathe-overlay.active { opacity: 1; pointer-events: auto; }
+
+.breathe-circle-container {
+  position: relative; width: 220px; height: 220px; display: flex; align-items: center; justify-content: center;
+}
+
+.breathe-circle-outer {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.25);
+}
+
+.breathe-circle {
+  width: 90px; height: 90px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 179, 138, 0.9) 0%, rgba(96, 128, 88, 0.4) 70%, transparent 100%);
+  box-shadow: 0 0 45px rgba(124, 179, 138, 0.55);
+  transition: transform 4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 4s ease;
+}
+
+.breathe-circle.expanding {
+  transform: scale(2.2);
+  box-shadow: 0 0 75px rgba(124, 179, 138, 0.85);
+}
+
+.breathe-circle.contracting {
+  transform: scale(1.0);
+  box-shadow: 0 0 30px rgba(124, 179, 138, 0.35);
+}
+
+.breathe-text {
+  margin-top: 36px; font-size: 20px; font-weight: 500; color: #f8fafc;
+  letter-spacing: 0.5px; text-align: center;
+}
+
+.breathe-subtext {
+  margin-top: 8px; font-size: 13px; color: #94a3b8; font-style: italic;
+}
+
+.btn-breathe-exit {
+  margin-top: 40px; padding: 10px 24px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #f8fafc; font-size: 13px; font-weight: 600; cursor: pointer;
+  backdrop-filter: blur(8px); transition: all 0.2s ease; width: auto;
+}
+.btn-breathe-exit:hover { background: rgba(255, 255, 255, 0.25); }
+
+/* Real-time Achievement Toast Notification */
+.achievement-toast {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: var(--glass-panel);
+  border: 1px solid var(--accent-gold);
+  border-radius: 999px;
+  padding: 10px 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25), 0 0 20px rgba(217, 119, 6, 0.2);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+body.dark-mode .achievement-toast {
+  background: var(--dark-glass);
+  border-color: #f59e0b;
+}
+.achievement-toast.visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.toast-icon { font-size: 22px; }
+.toast-title { font-weight: 700; font-size: 13px; color: var(--accent-gold); }
+.toast-desc { font-size: 12px; color: var(--ink); opacity: 0.9; }
+body.dark-mode .toast-desc { color: var(--dark-ink); }
+
+/* Zen Generic Modal Overlay */
+.zen-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 15, 22, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 70;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  padding: 16px;
+}
+.zen-modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.zen-modal-card {
+  width: 100%;
+  max-width: 680px;
+  max-height: 86vh;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalPop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+body.dark-mode .zen-modal-card {
+  background: var(--dark-panel);
+  border-color: var(--dark-line);
+}
+@keyframes modalPop {
+  0% { transform: scale(0.95) translateY(10px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+}
+body.dark-mode .modal-header { border-color: var(--dark-line); }
+.modal-header h2 { margin: 0; font-size: 17px; font-weight: 700; }
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 6px;
+  border-radius: 8px;
+  line-height: 1;
+}
+body.dark-mode .modal-close { color: var(--dark-muted); }
+.modal-close:hover { background: rgba(0, 0, 0, 0.05); }
+body.dark-mode .modal-close:hover { background: rgba(255, 255, 255, 0.1); }
+.modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* Gallery Filter Tabs */
+.gallery-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 16px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+body.dark-mode .gallery-filters { border-color: var(--dark-line); }
+.filter-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
-button:hover{filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15);}
-button:active{transform: translateY(0);}
-.overlay{position:absolute;top:30px;left:30px;pointer-events:none; z-index: 10;}
-.overlay h1{margin:0;font-size:24px;font-weight:300;color:var(--ink); letter-spacing: -0.5px;}
-body.dark-mode .overlay h1{color: var(--dark-ink);}
-.overlay p{margin:8px 0 0;color:var(--muted);font-size:14px;font-style: italic;}
-.season-badge{
-  display:block;padding:10px;background:var(--line);
-  border-radius:12px;font-size:14px;font-weight:500;
-  margin-bottom:20px;width:100%;text-align:center;
-  transition: all 0.3s ease;
+body.dark-mode .filter-chip { background: var(--dark-bg); border-color: var(--dark-line); color: var(--dark-muted); }
+.filter-chip.active {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: #fff;
 }
-body.dark-mode .season-badge{background: var(--dark-line); color: var(--dark-ink);}
-.genome-info{
-  font-size:12px;color:var(--muted);background:rgba(0,0,0,0.03);
-  padding:15px;border-radius:12px;margin-bottom:20px;
-  border:1px solid var(--line);line-height:1.6;
+
+/* Gallery Item Cards Grid */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
 }
-body.dark-mode .genome-info{background:rgba(0,0,0,0.2); border-color: var(--dark-line); color: var(--dark-ink);}
-#greenhouse{border-top:1px solid var(--line);padding-top:20px;margin-top:20px}
-.slot{
-  font-size:13px;padding:12px;background:var(--bg);
-  border-radius:12px;margin-bottom:10px;display:flex;
-  align-items:center;justify-content:space-between;
-  border:1px solid var(--line);cursor:pointer;
+.reward-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+  position: relative;
+}
+body.dark-mode .reward-card {
+  border-color: var(--dark-line);
+  background: rgba(0, 0, 0, 0.2);
+}
+.reward-card.equipped {
+  border-color: var(--accent-gold);
+  background: rgba(217, 119, 6, 0.08);
+}
+.reward-card.locked {
+  opacity: 0.6;
+  filter: grayscale(0.5);
+}
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.card-kanji {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+.card-badges {
+  display: flex;
+  gap: 4px;
+}
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.badge-shin { background: #fee2e2; color: #991b1b; }
+.badge-gyo { background: #fef3c7; color: #92400e; }
+.badge-so { background: #dcfce7; color: #166534; }
+.badge-rarity { background: rgba(0,0,0,0.06); color: var(--muted); }
+body.dark-mode .badge-rarity { background: rgba(255,255,255,0.1); color: var(--dark-muted); }
+
+.card-title { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+.card-desc { font-size: 12px; color: var(--muted); margin: 0 0 10px; line-height: 1.45; }
+body.dark-mode .card-desc { color: var(--dark-muted); }
+.card-condition {
+  font-size: 11px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  color: var(--ink);
+}
+body.dark-mode .card-condition { background: rgba(255, 255, 255, 0.05); color: var(--dark-ink); }
+.card-btn {
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
   transition: all 0.2s ease;
 }
-body.dark-mode .slot{background: var(--dark-bg); border-color: var(--dark-line);}
-.slot:hover{border-color: var(--accent-green); background: rgba(124,148,115,0.05);}
-.slot.selected{border-color:var(--accent-green);background:rgba(124,148,115,0.1)}
-.slot-color{width:16px;height:16px;border-radius:50%;display:inline-block; box-shadow: 0 0 4px rgba(0,0,0,0.2);}
-select{
-  width:100%;padding:12px;margin-bottom:12px;background:var(--bg);
-  color:var(--ink);border:1px solid var(--line);
-  border-radius:12px;font-family:inherit;
-  transition: all 0.2s ease;
+.card-btn.btn-equip { background: var(--accent-green); color: #fff; }
+.card-btn.btn-active { background: var(--accent-gold); color: #fff; }
+.card-btn.btn-locked { background: var(--line); color: var(--muted); cursor: not-allowed; }
+body.dark-mode .card-btn.btn-locked { background: var(--dark-line); color: var(--dark-muted); }
+
+/* FAQ & School Guide Elements */
+.faq-section { margin-bottom: 24px; }
+.faq-section h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent-gold);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+  margin: 18px 0 10px;
 }
-body.dark-mode select{background: var(--dark-bg); color: var(--dark-ink); border-color: var(--dark-line);}
-#pro-panel{display:none;border:1px solid var(--line);border-radius:12px;padding:15px;margin-top:15px}
-body.dark-mode #pro-panel{border-color: var(--dark-line);}
+body.dark-mode .faq-section h3 { border-color: var(--dark-line); }
+.faq-school-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: rgba(0, 0, 0, 0.015);
+}
+body.dark-mode .faq-school-card { border-color: var(--dark-line); background: rgba(0, 0, 0, 0.15); }
+.school-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.school-name { font-size: 14px; font-weight: 700; }
+.school-kanji { font-size: 18px; color: var(--accent-gold); font-weight: 700; }
+.school-reqs { margin: 6px 0 0 18px; padding: 0; font-size: 12.5px; color: var(--muted); }
+body.dark-mode .school-reqs { color: var(--dark-muted); }
+.ascii-diagram {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 10px;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 11px;
+  white-space: pre;
+  margin: 8px 0;
+  overflow-x: auto;
+  line-height: 1.25;
+}
+body.dark-mode .ascii-diagram { background: rgba(0, 0, 0, 0.35); color: #cbd5e1; }
+.fault-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 10px 0;
+}
+.fault-table th, .fault-table td {
+  padding: 8px;
+  border: 1px solid var(--line);
+  text-align: left;
+}
+body.dark-mode .fault-table th, body.dark-mode .fault-table td { border-color: var(--dark-line); }
+.fault-table th { background: rgba(0,0,0,0.03); font-weight: 600; }
+body.dark-mode .fault-table th { background: rgba(255,255,255,0.05); }
 </style>
 </head>
 <body>
 <main class="app">
-<section class="stage">
-<div class="canvas-wrap">
-<canvas id="plant"></canvas>
-<div class="overlay"><h1>ZenPlant — Calm Procedural Plant Studio</h1><p>Click a branch to prune it. Breathe.</p></div>
-</div>
-</section>
-<aside class="rail">
-<div id="season-badge" class="season-badge">Spring</div>
-<div style="display:flex;gap:8px">
-<button id="btn-grow">Grow +10</button>
-<button id="btn-grow-season" style="background:#10b981;color:#064e3b">+50</button>
-<button id="btn-play">Pause</button>
-</div>
-<div style="display:flex;align-items:center;gap:8px;margin:8px 0">
-<span style="font-size:11px;color:#94a3b8">Speed</span>
-<input type="range" id="grow-speed" min="0" max="5" step="0.5" value="1" style="flex:1">
-<span id="speed-label" style="font-size:11px;color:#94a3b8;width:24px">1×</span>
-</div>
-<!-- species-select removed for discovery system -->
-<h2 style="margin:15px 0 10px;font-size:16px">Genome</h2>
-<div class="genome-info" id="genome-info">Loading…</div>
-<button id="btn-reset" style="background:#475569">Random seed</button>
-<div id="greenhouse">
-<h3 style="margin:0 0 10px;font-size:13px;color:#cbd5e1">Greenhouse</h3>
-<button id="btn-save" style="background:#8b5cf6">Save current plant</button>
-<div id="slots-container"></div>
-<button id="btn-breed" style="background:#ec4899;display:none;margin-top:10px">Breed</button>
-</div>
-<button id="btn-pro" style="background:#0f172a;border:1px solid #334155;margin-top:15px">Developer mode</button>
-<div style="display:flex;gap:8px;margin-top:10px">
-<button id="btn-dark" style="background:#1e293b;font-size:11px;padding:6px">Dark/Light</button>
-<button id="btn-wood" style="background:#1e293b;font-size:11px;padding:6px">Wood: OFF</button>
-<button id="btn-wind" style="background:#1e293b;font-size:11px;padding:6px">Wind: OFF</button>
-</div>
-<div id="pro-panel">
-<button id="btn-export" style="background:#0ea5e9">Export plant JSON</button>
-<button id="btn-svg" style="background:#0ea5e9">Export SVG</button>
-<button id="btn-png" style="background:#0ea5e9">Export PNG</button>
-<button id="btn-timelapse" style="background:#0ea5e9">Record Timelapse</button>
-<button id="btn-import" style="background:#0ea5e9">Import JSON</button>
-<input type="file" id="import-file" accept="application/json" style="display:none"/>
-</div>
-</aside>
+
+  <!-- Fullscreen Serene Stage -->
+  <section class="stage">
+    <canvas id="plant" aria-label="ZenPlant Achtsamer Bonsai Garten"></canvas>
+
+    <!-- Floating Top Zen Bar -->
+    <header class="zen-top-bar">
+      <div class="zen-title-pill">
+        <h1>ZenPlant</h1>
+        <select id="species-select" class="zen-species-select" aria-label="Bonsai-Stil wählen" title="Bonsai-Stil wählen">
+          <option value="acer-palmatum">Momiji Ahorn (Acer Palmatum)</option>
+          <option value="pinus-thunbergii">Schwarzkiefer (Matsu)</option>
+          <option value="prunus-mume">Ume Pflaume (Prunus Mume)</option>
+          <option value="kengai-cascade">Kengai Kaskade (Wacholder)</option>
+          <option value="bunjingi-pine">Bunjingi Literat (Kiefer)</option>
+          <option value="chokkan-standard">Chokkan Aufrecht (Klassisch)</option>
+        </select>
+        <span class="zen-species-tag" id="species-title" style="display:none">Momiji Ahorn</span>
+      </div>
+
+      <div class="top-actions">
+        <button id="btn-quick-grow" class="icon-btn" title="Wachsen (+10)">🌱</button>
+        <button id="btn-time-speed" class="icon-btn pill-btn" title="Zeit-Tempo umschalten (1x / 2x / 5x)">⏳ 1x</button>
+        <button id="btn-weather" class="icon-btn" title="Atmosphäre & Wetter wechseln (Komorebi / Regen / Dämmerung)">🌦️</button>
+        <button id="btn-gallery" class="icon-btn" title="Tokonoma-Schätze & Galerie">🏆</button>
+        <button id="btn-faq" class="icon-btn" title="Bonsai-Schulen & Ästhetik-Guide">📖</button>
+        <button id="btn-tokonoma" class="icon-btn" title="Tokonoma Zen-Galerie Modus">🏛️</button>
+        <button id="btn-wind" class="icon-btn" title="Windklang (An/Aus)">🎐</button>
+        <button id="btn-dark" class="icon-btn" title="Tag/Nacht Modus">🌓</button>
+        <button id="btn-drawer-toggle" class="icon-btn" title="Studio Werkbank öffnen">☰</button>
+      </div>
+    </header>
+
+    <!-- Tokonoma Exit Floating Pill -->
+    <button id="btn-tokonoma-exit" class="btn-tokonoma-exit" style="display:none" title="Tokonoma Galerie verlassen">
+      ✕ Zen-Galerie verlassen
+    </button>
+
+    <!-- Contextual Hint Pill -->
+    <div class="zen-hint-wrap">
+      <div class="zen-hint" id="zen-hint">✂️ Schere: Über Äste wischen zum Schneiden oder Zupfen</div>
+    </div>
+
+    <!-- Floating Bottom Zen Multi-Tool Dock -->
+    <footer class="zen-dock-wrap">
+      <nav class="zen-dock" aria-label="Zen Werkzeuge">
+        <button id="tool-shear" class="dock-btn active" title="Schere: Ziehen zum Schneiden oder Zupfen">
+          <span class="dock-icon">✂️</span>
+          <span class="dock-label">Schere</span>
+        </button>
+        <button id="tool-water" class="dock-btn" title="Gießen: Sanften Nebel sprühen">
+          <span class="dock-icon">💧</span>
+          <span class="dock-label">Wasser</span>
+        </button>
+        <button id="tool-wire" class="dock-btn" title="Drahten: Äste biegen & formen">
+          <span class="dock-icon">🪢</span>
+          <span class="dock-label">Draht</span>
+        </button>
+        <button id="tool-jin" class="dock-btn" title="Jin: Ast zu gebleichtem Totholz schnitzen">
+          <span class="dock-icon">🪵</span>
+          <span class="dock-label">Jin</span>
+        </button>
+        <button id="tool-rake" class="dock-btn" title="Harke: Meditative Sandwellen im Kiesbett ziehen">
+          <span class="dock-icon">🪨</span>
+          <span class="dock-label">Harke</span>
+        </button>
+        <button id="tool-breathe" class="dock-btn" title="Atmen: Achtsame Atemmeditation">
+          <span class="dock-icon">🧘</span>
+          <span class="dock-label">Atmen</span>
+        </button>
+        <button id="tool-undo" class="dock-btn" title="Rückgängig (Letzten Schritt zurücknehmen)">
+          <span class="dock-icon">↩️</span>
+          <span class="dock-label">Zurück</span>
+        </button>
+      </nav>
+    </footer>
+  </section>
+
+  <!-- Offcanvas Backdrop & Studio Drawer -->
+  <div id="drawer-backdrop" class="drawer-backdrop"></div>
+  <aside id="studio-drawer" class="rail">
+    <div class="drawer-header">
+      <h2>Studio & Botanik Labor</h2>
+      <button id="btn-drawer-close" class="close-btn" title="Schließen">✕</button>
+    </div>
+
+    <div id="season-badge" class="season-badge">Frühling</div>
+
+    <!-- Artisanal Ceramic Pot & Suiseki Slab -->
+    <section class="control-card">
+      <h3>Bonsai-Schale & Glasur</h3>
+      <select id="pot-select" class="zen-species-select" style="width:100%;padding:6px 10px;margin-top:4px">
+        <option value="classic">Klassischer Basalt (Slate)</option>
+        <option value="yixing">Yixing Purpur-Ton (Zisha)</option>
+        <option value="oribe">Oribe Kupfergrün Krakelee</option>
+        <option value="tenmoku">Tenmoku Eisen-Ölfleck</option>
+        <option value="kurama">Kurama Gebirgsfelsplatte</option>
+      </select>
+    </section>
+
+    <!-- Primary Growth Controls -->
+    <div class="btn-row">
+      <button id="btn-grow">Grow +10</button>
+      <button id="btn-grow-season" style="background:#10b981;color:#064e3b">+50</button>
+      <button id="btn-step" style="background:#0f766e">1 Step</button>
+    </div>
+    <div class="btn-row">
+      <button id="btn-play">Pause</button>
+      <button id="btn-rewind" style="background:#64748b">Rückwärts</button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin:10px 0">
+      <span style="font-size:11px;color:var(--muted)">Wachstumstempo</span>
+      <input type="range" id="grow-speed" min="0" max="3" step="0.25" value="1" style="flex:1" title="0× Pause, 0.5× Sanft, 1× Zen, 2× Zügig">
+      <span id="speed-label" style="font-size:11px;color:var(--muted);width:32px">1.0×</span>
+    </div>
+
+    <!-- Live Design / Gestaltung -->
+    <section class="control-card">
+      <h3>Gestaltung (Live Phänotyp)</h3>
+      <label class="dev-field">
+        <span>Verzweigungswinkel</span>
+        <output id="design-angle-value">35°</output>
+        <input id="design-angle" type="range" min="10" max="65" step="1" value="35">
+      </label>
+      <label class="dev-field">
+        <span>Blütengröße</span>
+        <output id="design-flower-size-value">8.0</output>
+        <input id="design-flower-size" type="range" min="2" max="18" step="0.5" value="8">
+      </label>
+      <label class="dev-field">
+        <span>Holzsteifheit</span>
+        <output id="design-stiffness-value">1.00</output>
+        <input id="design-stiffness" type="range" min="0.2" max="3.0" step="0.05" value="1.0">
+      </label>
+      <button id="btn-apply-design" style="background:#0369a1;margin-top:6px;margin-bottom:0">Anwenden</button>
+    </section>
+
+    <!-- Genome & Identification -->
+    <h2 style="margin:12px 0 8px;font-size:14px;font-weight:600">Genom & Biologie</h2>
+    <div class="genome-info" id="genome-info">Lädt…</div>
+    <button id="btn-reset" style="background:#475569">Zufälliger Samen</button>
+
+    <!-- Greenhouse & Breeding -->
+    <div id="greenhouse">
+      <h3 style="margin:0 0 8px;font-size:13px;color:var(--muted)">Gewächshaus</h3>
+      <button id="btn-save" style="background:#8b5cf6">Pflanze speichern</button>
+      <div id="slots-container"></div>
+      <button id="btn-breed" style="background:#ec4899;display:none;margin-top:8px">Kreuzen (Breed)</button>
+    </div>
+
+    <!-- Pro/Dev & Overlays -->
+    <button id="btn-pro" style="background:#0f172a;border:1px solid #334155;margin-top:14px">Entwickler & Overlays</button>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button id="btn-wood" style="background:#1e293b;font-size:11px;padding:6px">Holz: AN</button>
+    </div>
+
+    <div id="pro-panel">
+      <div style="margin-bottom:10px">
+        <label class="check-row">
+          <input id="dev-show-points" type="checkbox">
+          <span>Schnittpunkte & Gelenke</span>
+        </label>
+        <label class="check-row">
+          <input id="dev-show-ids" type="checkbox">
+          <span>Knoten-IDs anzeigen</span>
+        </label>
+        <label class="check-row">
+          <input id="dev-show-hitbox" type="checkbox">
+          <span>Trefferbereich visualisieren</span>
+        </label>
+        <label class="dev-field" style="margin-top:4px">
+          <span>Trefferradius</span>
+          <output id="dev-hit-radius-value">20px</output>
+          <input id="dev-hit-radius" type="range" min="8" max="45" step="1" value="20">
+        </label>
+      </div>
+      <button id="btn-export" style="background:#0ea5e9">Pflanze JSON exportieren</button>
+      <button id="btn-svg" style="background:#0ea5e9">SVG exportieren</button>
+      <button id="btn-png" style="background:#0ea5e9">PNG exportieren</button>
+      <button id="btn-timelapse" style="background:#0ea5e9">Zeitraffer aufnehmen</button>
+      <button id="btn-import" style="background:#0ea5e9">JSON importieren</button>
+      <input type="file" id="import-file" accept="application/json" style="display:none"/>
+    </div>
+  </aside>
+
+  <!-- Mindful Breathing Meditation Modal -->
+  <div id="breathe-overlay" class="breathe-overlay">
+    <div class="breathe-circle-container">
+      <div class="breathe-circle-outer"></div>
+      <div id="breathe-circle" class="breathe-circle"></div>
+    </div>
+    <div id="breathe-text" class="breathe-text">Einatmen…</div>
+    <div class="breathe-subtext">Lass den Atem ruhig fließen und spüre die Stille.</div>
+    <button id="btn-breathe-exit" class="btn-breathe-exit">Zurück zum Baum</button>
+  </div>
+
+  <!-- Real-time Achievement Celebration Toast Notification -->
+  <div id="achievement-toast" class="achievement-toast" aria-live="polite">
+    <span class="toast-icon" id="toast-icon">🏆</span>
+    <div>
+      <div class="toast-title" id="toast-title">Stil vollendet!</div>
+      <div class="toast-desc" id="toast-desc">Moyogi (Frei Aufrecht) — Neuer Schatz freigeschaltet!</div>
+    </div>
+  </div>
+
+  <!-- Tokonoma Accoutrements Gallery Modal -->
+  <div id="modal-gallery" class="zen-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="gallery-title">
+    <div class="zen-modal-card">
+      <div class="modal-header">
+        <h2 id="gallery-title">🏆 Tokonoma-Schätze & Begleitobjekte</h2>
+        <button id="btn-gallery-close" class="modal-close" aria-label="Schließen">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0 0 12px;color:var(--muted);font-size:12.5px;">
+          Traditionelle Begleitobjekte für den Tokonoma-Präsentationsraum (三点飾り — San-ten-kazari). Erreiche klassische Bonsai-Stile oder gärtnerische Meilensteine, um seltene Bronzen, Rollen und Kiesel freizuschalten.
+        </p>
+
+        <!-- Category Filters -->
+        <div class="gallery-filters" id="gallery-filters">
+          <button class="filter-chip active" data-cat="all">Alle Objekte</button>
+          <button class="filter-chip" data-cat="kakejiku">Hängerollen (掛軸)</button>
+          <button class="filter-chip" data-cat="tenpai">Bronzefiguren (添配)</button>
+          <button class="filter-chip" data-cat="koro">Räuchergefäße (香炉)</button>
+          <button class="filter-chip" data-cat="suiseki">Steine (水石)</button>
+          <button class="filter-chip" data-cat="shitakusa">Akzentpflanzen (下草)</button>
+          <button class="filter-chip" data-cat="ishidoro">Laternen (石灯籠)</button>
+        </div>
+
+        <!-- Accoutrements Card Grid -->
+        <div class="gallery-grid" id="gallery-grid">
+          <!-- Dynamically populated by app.ts -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Classical Bonsai Schools FAQ & Academy Tutorial Modal -->
+  <div id="modal-faq" class="zen-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="faq-title">
+    <div class="zen-modal-card" style="max-width:760px;">
+      <div class="modal-header">
+        <h2 id="faq-title">📖 Bonsai-Schulen & Ästhetik-Guide</h2>
+        <button id="btn-faq-close" class="modal-close" aria-label="Schließen">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="faq-section">
+          <h3>1. Die japanische Philosophie: Shin-Zen-Bi & Ten-Chi-Jin</h3>
+          <p>
+            Ein Bonsai ist kein Miniaturbaum in Ketten, sondern ein lebendiges Naturgedicht. Nach den Richtlinien der <strong>Nippon Bonsai Association (NBA)</strong> folgt die Gestaltung drei ewigen Säulen:
+          </p>
+          <ul>
+            <li><strong>Shin-Zen-Bi (真・善・美)</strong>: <em>Wahrheit</em> zur Natur der Baumart, <em>Güte</em> in der pflegenden Fürsorge, <em>Schönheit</em> im harmonischen Kunstwerk.</li>
+            <li><strong>Ten-Chi-Jin (天地人)</strong>: Das kosmische Dreieck aus <em>Himmel</em> (Krone/Apex), <em>Erde</em> (Wurzelansatz/Nebari) und <em>Mensch</em> (die verbindende Astgestaltung). Ein Bonsai wird stets als ungleichschenkliges Dreieck komponiert, niemals symmetrisch starr.</li>
+          </ul>
+        </div>
+
+        <div class="faq-section">
+          <h3>2. Die 8 klassischen Stilarten (Katakachi)</h3>
+          
+          <div class="faq-school-card">
+            <div class="school-header">
+              <span class="school-name">1. Chokkan (直幹 — Streng Aufrecht)</span>
+              <span class="school-kanji">直幹</span>
+            </div>
+            <div class="ascii-diagram">       ▲  (Apex exakt lotrecht über Wurzelbasis)
+      / \
+    ─/───\─  [Ast 3: Ushiro-eda (Tiefenast nach hinten)]
+    /     \
+  ─/───────\─ [Ast 2: Ni-no-eda (links, ~50% Höhe)]
+  /         \
+─/───────────\─ [Ast 1: Ichi-no-eda (dominant rechts, ~33% Höhe)]
+      ||
+   ───┴┴───  (Kreisförmiges Nebari)</div>
+            <ul class="school-reqs">
+              <li><strong>Merkmal:</strong> Kerzengerader Stamm, sichtbare harmonische Verjüngung von unten nach oben.</li>
+              <li><strong>Erkennungskriterium:</strong> Horizontale Abweichung der Krone |Δx| ≤ 6% der Gesamthöhe, Sinuosität S ≤ 1.05. Keine Äste unter Topfrand.</li>
+              <li><strong>Tipp:</strong> Draht vorsichtig nutzen, um den Stamm gerade nach oben auszurichten.</li>
+            </ul>
+          </div>
+
+          <div class="faq-school-card">
+            <div class="school-header">
+              <span class="school-name">2. Moyogi (模様木 — Frei Aufrecht)</span>
+              <span class="school-kanji">模様木</span>
+            </div>
+            <div class="ascii-diagram">       ▲  (Krone kehrt lotrecht über Wurzelbasis zurück!)
+     (   \
+      )   \───► [Ast an Außenbiegung (Kyokusho)]
+     (
+   ───┴┴───</div>
+            <ul class="school-reqs">
+              <li><strong>Merkmal:</strong> Sanft geschwungener Stammverlauf in 3–5 wechselnden Kurven.</li>
+              <li><strong>Die eiserne NBA-Regel:</strong> Trotz aller Biegungen <em>muss der Scheitelpunkt (Apex) wieder genau über die Wurzelbasis zurückkehren</em> (|Δx| ≤ 14%).</li>
+              <li><strong>Kyokusho-Regel:</strong> Äste dürfen nur an den <em>Außenseiten</em> der Kurven entspringen, niemals in den Innenfalten (Uchikomi-Fehler).</li>
+            </ul>
+          </div>
+
+          <div class="faq-school-card">
+            <div class="school-header">
+              <span class="school-name">3. Shakan (斜幹 — Geneigter Stamm)</span>
+              <span class="school-kanji">斜幹</span>
+            </div>
+            <div class="ascii-diagram">           ▲  (Geneigte Krone)
+          /
+        /   ◄─── [Kräftiger Gegengewicht-Ast]
+      /
+   ──┴┴─── (Ausgeprägte Ankerwurzeln auf Zugseite)</div>
+            <ul class="school-reqs">
+              <li><strong>Merkmal:</strong> Stamm neigt sich mit 20° bis 45° gegenüber der Senkrechten zur Seite.</li>
+              <li><strong>Gleichgewicht:</strong> Ein kräftiger Ausgleichsast wächst in die Gegenrichtung der Neigung, um optisches Übergewicht zu verhindern.</li>
+            </ul>
+          </div>
+
+          <div class="faq-school-card">
+            <div class="school-header">
+              <span class="school-name">4. Kengai (懸崖 — Vollkaskade)</span>
+              <span class="school-kanji">懸崖</span>
+            </div>
+            <div class="ascii-diagram">   (Topfrand) ─────[y = 0]
+      /           |  (Hoher Kaskadentopf)
+    (Bogen)       |
+     \            ─────[y = 38px Topfboden]
+      \
+       ▼  (Kaskadenspitze stürzt tief UNTER den Topfboden hinab!)</div>
+            <ul class="school-reqs">
+              <li><strong>Merkmal:</strong> Symbolisiert einen Baum an einer schroffen Klippe, herabgedrückt von Schneelasten.</li>
+              <li><strong>Kriterium:</strong> Die Astspitze fällt <em>unter den Boden des Topfes</em> (y > 38px). Der Anfangsstamm steigt zunächst kurz über den Topfrand auf.</li>
+            </ul>
+          </div>
+
+          <div class="faq-school-card">
+            <div class="school-header">
+              <span class="school-name">5. Han-Kengai (半懸崖 — Halbkaskade)</span>
+              <span class="school-kanji">半懸崖</span>
+            </div>
+            <ul class="school-reqs">
+              <li><strong>Merkmal:</strong> Ein über eine Schlucht oder ein Flussufer ragender Hauptast.</li>
+              <li><strong>Kriterium:</strong> Der Ast sinkt unter den Topfrand (y > 0px), bleibt aber <em>oberhalb oder auf Höhe des Topfbodens</em> (y ≤ 38px). Starke horizontale Ausladung.</li>
+            </ul>
+          </div>
+
+          <div class="faq-school-card">
+            <div class="school-header">
+              <span class="school-name">6. Bunjingi (文人木 — Literatenstil)</span>
+              <span class="school-kanji">文人木</span>
+            </div>
+            <ul class="school-reqs">
+              <li><strong>Merkmal:</strong> Asketisch, minimalistisch, inspiriert von den Tuschezeichnungen der Nanga-Mönche.</li>
+              <li><strong>Kriterium:</strong> Extremes Schlankheitsverhältnis (Höhe zu Stammdicke ≥ 16:1). Die unteren 70% des Stammes sind völlig kahl; Laub sitzt ausschließlich im oberen Kronenviertel.</li>
+              <li><strong>Tipp:</strong> Alle unteren Seitenäste konsequent mit der Schere entfernen.</li>
+            </ul>
+          </div>
+
+          <div class="faq-school-card">
+            <div class="school-header">
+              <span class="school-name">7. Fukinagashi (吹流し — Windgepeitscht)</span>
+              <span class="school-kanji">吹流し</span>
+            </div>
+            <ul class="school-reqs">
+              <li><strong>Merkmal:</strong> Ständiger, unerbittlicher Seewind aus einer Richtung.</li>
+              <li><strong>Kriterium:</strong> Mindestens 75–85% der gesamten Ast- und Blattmasse strömen in Lee-Richtung zur Seite. Flache, gestraffte Astwinkel.</li>
+            </ul>
+          </div>
+
+          <div class="faq-school-card">
+            <div class="school-header">
+              <span class="school-name">8. Jin & Shari (死に木 / 舎利 — Totholz-Ästhetik)</span>
+              <span class="school-kanji">神・舎利</span>
+            </div>
+            <ul class="school-reqs">
+              <li><strong>Merkmal:</strong> Gebleichtes, uraltes Totholz (Jin = Astspitzen, Shari = Stammpartien) als Zeichen von Vergänglichkeit (Wabi-Sabi).</li>
+              <li><strong>Die Mizusui-Regel (Lebensader):</strong> Totholz darf niemals die Saftbahn zu lebendem Grün komplett durchtrennen. Es muss immer eine durchgehende lebende Rindenader von den Wurzeln zu den Nadeln/Blättern existieren!</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="faq-section">
+          <h3>3. Verbotene Fehleräste (Imi-eda 忌み枝)</h3>
+          <p>Klassische Preisrichter ahnden geometrische Unregelmäßigkeiten mit strengen Punktabzügen:</p>
+          <table class="fault-table">
+            <thead>
+              <tr>
+                <th>Japanischer Name</th>
+                <th>Bedeutung</th>
+                <th>Beschreibung</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Kuruma-eda (車枝)</strong></td>
+                <td>Radäste</td>
+                <td>3 oder mehr Äste entspringen auf exakt gleicher Stammhöhe. Lösung: Bis auf einen Ast alle entfernen.</td>
+              </tr>
+              <tr>
+                <td><strong>Kannon-eda (観音枝)</strong></td>
+                <td>Balkenäste</td>
+                <td>Zwei Äste wachsen sich genau gegenüberliegend auf gleicher Höhe heraus. Lösung: Einen Ast einkürzen oder wegschneiden.</td>
+              </tr>
+              <tr>
+                <td><strong>Uchikomi (内込み)</strong></td>
+                <td>Bauchast</td>
+                <td>Ein Ast wächst in der Innenfalte einer Stammbiegung. Er stört den Fluss und muss entfernt werden.</td>
+              </tr>
+              <tr>
+                <td><strong>Sagari-eda (下がり枝)</strong></td>
+                <td>Kreuzender Hängeast</td>
+                <td>Ein Ast wächst störend nach unten durch die darunterliegende Astetage.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="faq-section">
+          <h3>4. Die Tokonoma-Präsentation & Inward Flow Rule (Nagare)</h3>
+          <p>
+            Im Tokonoma-Modus (🏛️) betritt der Baum die zeremonielle japanische Raumnische. Die Präsentation folgt dem Prinzip des <strong>San-ten-kazari (三点飾り)</strong>:
+          </p>
+          <ul>
+            <li><strong>Shu-ten (Hauptobjekt):</strong> Der Bonsai auf seinem lackierten Tischchen (Shoku).</li>
+            <li><strong>Fuku-ten (Hintergrund):</strong> Die Kakejiku-Hängerolle (Enso, Sansui, Mond). Sie darf niemals das gleiche Motiv wie der Baum zeigen (Vermeidung von Dopplung / Juubuku).</li>
+            <li><strong>Soe (Begleiter):</strong> Bronzefigur (Tenpai), Räuchergefäß (Koro), Gelehrtenstein (Suiseki), Akzentgras (Shitakusa) oder Laterne (Ishidoro).</li>
+          </ul>
+          <p>
+            <strong>Die Fluss-Regel (Inward Flow):</strong> Der Baum verneigt sich immer zum Zentrum der Nische. Fließt der Baum nach rechts, steht er links und das Begleitobjekt rechts. Fließt der Baum nach links, steht er rechts und das Begleitobjekt links.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </main>
 <script src="/app.js"></script>
 </body>

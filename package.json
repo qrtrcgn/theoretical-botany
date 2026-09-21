@@ -8,6 +8,7 @@
     "start": "bun --port 3000 src/server.ts",
     "test": "bun test",
     "build:client": "bun build src/ui/app.ts --outdir public --target browser --entry-naming app.js",
+    "typecheck": "tsc --noEmit",
     "go": "bun install && bun run build:client && bun run start"
   },
   "dependencies": {

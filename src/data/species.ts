@@ -129,19 +129,122 @@ export const sakuraOrchid: SpeciesDef = {
   },
 };
 
-export const SPECIES: SpeciesDef[] = [japaneseBonsai, zenBamboo, sakuraOrchid];
+/**
+ * Momiji (Acer Palmatum) - Japanese Mountain Maple
+ * Known for its delicate palmate leaves, architectural balance, and fiery autumn color changes.
+ */
+export const acerPalmatum: SpeciesDef = {
+  id: "acer-palmatum",
+  name: "Momiji Ahorn (Acer)",
+  genus: "Acer",
+  version: "1.0.0",
+  traitRanges: {
+    vigor: [0.65, 0.85],
+    angle: [28, 42],
+    decay: [0.06, 0.10],
+    lenScale: [22, 38],
+  },
+  hiddenTraits: {
+    budActivationThreshold: 0.35,
+    shadeTolerance: 0.65,
+    apicalDominance: 0.95,
+    internodeElasticity: 0.85,
+    dormancyStrength: 0.55,
+  },
+  leafResourceYield: 1.1,
+  seasonalRange: [0, 240],
+  palette: {
+    typicalRGB: [194, 65, 12], // warm vermilion / autumn maple
+    typicalShape: 1,
+    typicalMaterial: 0,
+  },
+};
+
+/**
+ * Kengai (Cascade Juniper) - Classic weeping cliffside bonsai
+ * Features dramatic descending branches that arch gracefully below the planter rim.
+ */
+export const kengaiCascade: SpeciesDef = {
+  id: "kengai-cascade",
+  name: "Kengai Kaskade (Juniperus)",
+  genus: "Juniperus",
+  version: "1.0.0",
+  traitRanges: {
+    vigor: [0.55, 0.75],
+    angle: [38, 55],
+    decay: [0.05, 0.09],
+    lenScale: [18, 32],
+  },
+  hiddenTraits: {
+    budActivationThreshold: 0.25,
+    shadeTolerance: 0.8,
+    apicalDominance: 0.7,
+    internodeElasticity: 1.2,
+    dormancyStrength: 0.7,
+  },
+  leafResourceYield: 0.9,
+  seasonalRange: [0, 260],
+  palette: {
+    typicalRGB: [20, 83, 45], // deep jade juniper
+    typicalShape: 0,
+    typicalMaterial: 0,
+  },
+};
+
+/**
+ * Bunjingi (Literati Pine) - Poetic, slender, minimalist Japanese pine
+ * Characterized by a sinuous, tall, bare trunk and a restrained, expressive crown.
+ */
+export const bunjingiPine: SpeciesDef = {
+  id: "bunjingi-pine",
+  name: "Bunjingi Literat (Pinus)",
+  genus: "Pinus",
+  version: "1.0.0",
+  traitRanges: {
+    vigor: [0.7, 0.9],
+    angle: [14, 24],
+    decay: [0.07, 0.11],
+    lenScale: [35, 55],
+  },
+  hiddenTraits: {
+    budActivationThreshold: 0.45,
+    shadeTolerance: 0.5,
+    apicalDominance: 1.6, // strong apical drive
+    internodeElasticity: 0.7,
+    dormancyStrength: 0.8,
+  },
+  leafResourceYield: 0.75,
+  seasonalRange: [0, 210],
+  palette: {
+    typicalRGB: [47, 79, 79], // slate pine green
+    typicalShape: 0,
+    typicalMaterial: 0,
+  },
+};
+
+export const SPECIES: SpeciesDef[] = [
+  japaneseBonsai,
+  acerPalmatum,
+  kengaiCascade,
+  bunjingiPine,
+  sakuraOrchid,
+  zenBamboo,
+];
 
 /**
  * Get a species definition by ID.
  * 
- @param id Species ID (e.g. "japanese-bonsai", "zen-bamboo", "sakura-orchid")
- @returns Species definition or undefined if not found
+ * @param id Species ID
+ * @returns Species definition or undefined if not found
  */
 export function getSpeciesById(id: string): SpeciesDef | undefined {
   const speciesMap: Record<string, SpeciesDef> = {
     "japanese-bonsai": japaneseBonsai,
-    "zen-bamboo": zenBamboo,
+    "acer-palmatum": acerPalmatum,
+    "kengai-cascade": kengaiCascade,
+    "bunjingi-pine": bunjingiPine,
     "sakura-orchid": sakuraOrchid,
+    "zen-bamboo": zenBamboo,
   };
   return speciesMap[id];
 }

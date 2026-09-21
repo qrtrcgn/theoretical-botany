@@ -90,11 +90,12 @@ export function growOnce(
   updateFallingDebris(newState);
   triggerAbscissionIfDue(newState, season, prng);
 
-  if (season === 0) {
+  if (season === 0 || season === 80 || (newState.soilMoisture && newState.soilMoisture > 0.65 && newState.step % 25 === 0)) {
     budActivation(newState, prng);
   }
 
-  if (season < BUDBREAK_WINDOW_END) {
+  // Active budbreak in spring/summer and responsive to watering
+  if (season < 160 || (newState.soilMoisture && newState.soilMoisture > 0.55)) {
     budbreakStep(newState, prng);
     epicormicStep(newState, prng);
   }
@@ -563,9 +564,11 @@ export function triggerAbscissionIfDue(state: PlantState, season: number, prng: 
 
 export function budbreakStep(state: PlantState, prng: Prng): void {
   const densityBrake = Math.max(0, 1 - state.nodes.length / MAX_TOTAL_NODES);
+  const moistureBonus = Math.max(0, ((state.soilMoisture ?? 0.5) - 0.4) * 0.06);
+  const breakChance = (BUDBREAK_CHANCE_PER_STEP + moistureBonus) * densityBrake;
   for (const n of state.nodes) {
     if (n.type !== "bud" || n.budState !== "dormant") continue;
-    if (prng.random() >= BUDBREAK_CHANCE_PER_STEP * densityBrake) continue;
+    if (prng.random() >= breakChance) continue;
     n.type = "meristem";
     n.terminal = true;
     n.budState = "active";
@@ -649,6 +652,21 @@ export function pruneNodeAt(state: PlantState, targetNodeId: number, t: number):
   const targetNode = newState.nodes[targetIndex];
   if (targetNode.type !== "stem" && targetNode.type !== "meristem") return state;
 
+  // Calculate wood thickness and structural prominence
+  let descendantCount = 0;
+  const dStack = [targetNodeId];
+  while (dStack.length > 0) {
+    const cur = dStack.pop()!;
+    for (const n of state.nodes) {
+      if (n.parentId === cur) {
+        descendantCount++;
+        dStack.push(n.id);
+      }
+    }
+  }
+  const wood = Math.min(1.0, (targetNode.age ?? 0) / 80);
+  const thickness = Math.max(1.2, Math.sqrt(descendantCount + 1) * 1.35 + wood * 1.8);
+
   const cutT = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 1;
   const originalLength = Math.max(0, targetNode.length);
   const minStub = Math.min(originalLength, 0.4);
@@ -682,20 +700,92 @@ export function pruneNodeAt(state: PlantState, targetNodeId: number, t: number):
 
   newState.nodes = newState.nodes.filter((n) => !toRemove.has(n.id));
 
+  // Differential sap pressure and vigor dynamics:
+  // Thicker branches lose substantially more water resources (sap pressure) and energy.
+  const isBroken = Boolean(targetNode.isBroken);
+  const waterLoss = isBroken ? thickness * 6.5 : (thickness > 3.0 ? thickness * 3.8 : 1.2);
+  const energyLoss = isBroken ? thickness * 4.5 : (thickness > 3.0 ? thickness * 2.2 : 0.8);
+
+  if (newState.resources) {
+    newState.resources = {
+      energy: Math.max(0, newState.resources.energy - energyLoss),
+      water: Math.max(0, newState.resources.water - waterLoss),
+      structural: Math.max(0, newState.resources.structural - thickness * 1.5),
+    };
+  }
+
+  // Spawn weeping sap droplets at the wound face for thick cuts and fractures
+  if (thickness > 2.5 || isBroken) {
+    const sapDrops = [...(newState.sapDrops || [])];
+    const cutX = targetNode.x + Math.cos(targetNode.angle) * targetNode.length;
+    const cutY = targetNode.y + Math.sin(targetNode.angle) * targetNode.length;
+    const dropCount = isBroken ? 4 : 2;
+    for (let i = 0; i < dropCount; i++) {
+      sapDrops.push({
+        x: cutX + (Math.random() - 0.5) * thickness * 0.8,
+        y: cutY + (Math.random() - 0.5) * thickness * 0.8,
+        size: 1.6 + Math.random() * (thickness * 0.3),
+        alpha: 0.95,
+        vy: 3 + Math.random() * 5,
+      });
+    }
+    newState.sapDrops = sapDrops;
+  }
+
+  // Wake up latent buds proximal to the cut and on the parent branch
+  let awakenedAny = false;
   for (const n of newState.nodes) {
-    if (n.parentId !== targetNodeId) continue;
-    if (n.type !== "bud" || n.budState !== "dormant") continue;
-    n.type = "meristem";
-    n.terminal = true;
-    n.budState = "active";
-    n.v = Math.max(0.4, expressTrait(state.genome, "vigor") * 0.7);
-    n.targetLength = expressTrait(state.genome, "lenScale") * 0.9;
-    n.length = 0;
-    n.age = 0;
+    if (n.parentId === targetNodeId || n.parentId === targetNode.parentId) {
+      if (n.type === "bud" && n.budState === "dormant") {
+        n.type = "meristem";
+        n.terminal = true;
+        n.budState = "active";
+        n.v = Math.max(0.45, expressTrait(state.genome, "vigor") * 0.75);
+        n.targetLength = expressTrait(state.genome, "lenScale") * 0.95;
+        n.length = 0;
+        n.age = 0;
+        awakenedAny = true;
+      }
+    }
+  }
+
+  // If no existing buds were found to awaken, sprout a new back-bud on the remaining stub!
+  if (!awakenedAny && targetNode.length > 0.8 && newState.nodes.length < MAX_TOTAL_NODES) {
+    const stubT = 0.7;
+    const budX = targetNode.x + Math.cos(targetNode.angle) * targetNode.length * stubT;
+    const budY = targetNode.y + Math.sin(targetNode.angle) * targetNode.length * stubT;
+    const side = Math.random() < 0.5 ? -1 : 1;
+    newState.nodes.push({
+      id: -newState.idCounter++,
+      parentId: targetNode.id,
+      x: budX,
+      y: budY,
+      angle: normalizeAngle(targetNode.angle + side * 1.1),
+      depth: targetNode.depth + 1,
+      type: "meristem",
+      terminal: true,
+      age: 0,
+      length: 0,
+      targetLength: expressTrait(state.genome, "lenScale") * 0.9,
+      v: Math.max(0.4, expressTrait(state.genome, "vigor") * 0.7),
+      budState: "active",
+      isCut: false,
+      resourceProduction: 0,
+      shade: targetNode.shade,
+      curve: (Math.random() - 0.5) * 0.3,
+      leafSizeJitter: 0,
+      leafShapeJitter: 0,
+      leafHueShift: 0,
+      hasThorns: false,
+      fruitAge: 0,
+      fallState: "attached",
+      fallSeed: Math.random(),
+      attachT: stubT,
+    });
   }
 
   newState.step++;
-  newState.cutAnimTime = 1.0;
+  newState.cutAnimTime = 1.0 + (thickness > 3.5 ? 0.5 : 0);
   return newState;
 }
 
