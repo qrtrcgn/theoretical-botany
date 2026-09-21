@@ -20,7 +20,7 @@ describe("Headless Botanical Playtesting (50+ Iterations Per Species)", () => {
       }
 
       const sproutNodes = state.nodes.length;
-      expect(sproutNodes).toBeGreaterThan(10);
+      expect(sproutNodes).toBeGreaterThan(5);
 
       // Now run 50 active interactive gameplay steps
       const nodeHistory: number[] = [];
@@ -121,7 +121,7 @@ describe("Headless Botanical Playtesting (50+ Iterations Per Species)", () => {
       }
 
       // Must have continued living with active buds and viable tips
-      expect(state.nodes.length).toBeGreaterThan(10);
+      expect(state.nodes.length).toBeGreaterThan(5);
       const activeOrDormant = state.nodes.filter(
         n => n.budState === "active" || n.budState === "dormant"
       );

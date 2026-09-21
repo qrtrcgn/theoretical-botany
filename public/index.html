@@ -124,6 +124,12 @@ body.dark-mode .icon-btn {
 .icon-btn:active {
   transform: translateY(0);
 }
+.icon-btn.active {
+  background: var(--accent-green) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 0 12px rgba(96, 128, 88, 0.45);
+}
 .icon-btn.pill-btn {
   width: auto; min-width: 52px; border-radius: 999px; padding: 0 10px; font-size: 12px; font-weight: 600;
 }
@@ -685,6 +691,7 @@ body.dark-mode .bonsai-svg-diagram {
       <div class="top-actions">
         <button id="btn-quick-grow" class="icon-btn" title="Wachsen (+10)">🌱</button>
         <button id="btn-time-speed" class="icon-btn pill-btn" title="Zeit-Tempo umschalten (1x / 2x / 5x)">⏳ 1x</button>
+        <button id="btn-foliage-xray" class="icon-btn" title="Laub-Transparenz umschalten (Skelettschau) [Taste X]">🍃</button>
         <button id="btn-weather" class="icon-btn" title="Atmosphäre & Wetter wechseln (Komorebi / Regen / Dämmerung)">🌦️</button>
         <button id="btn-gallery" class="icon-btn" title="Tokonoma-Schätze & Galerie">🏆</button>
         <button id="btn-faq" class="icon-btn" title="Bonsai-Schulen & Ästhetik-Guide">📖</button>
@@ -816,7 +823,8 @@ body.dark-mode .bonsai-svg-diagram {
     <!-- Pro/Dev & Overlays -->
     <button id="btn-pro" style="background:#0f172a;border:1px solid #334155;margin-top:14px">Entwickler & Overlays</button>
     <div style="display:flex;gap:8px;margin-top:8px">
-      <button id="btn-wood" style="background:#1e293b;font-size:11px;padding:6px">Holz: AN</button>
+      <button id="btn-wood" style="background:#1e293b;font-size:11px;padding:6px;flex:1">Holz: AN</button>
+      <button id="btn-xray" style="background:#1e293b;font-size:11px;padding:6px;flex:1">Laub-Durchsicht: AUS</button>
     </div>
 
     <div id="pro-panel">

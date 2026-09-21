@@ -134,20 +134,24 @@ export function pluckLeavesAlongSwipe(
 
 export function getNodeThickness(state: PlantState, nodeId: number): number {
   const node = state.nodes.find((n) => n.id === nodeId);
-  if (!node) return 1.5;
-  let descendantCount = 0;
+  if (!node) return 1.2;
+  let descendantStems = 0;
   const stack = [nodeId];
   while (stack.length > 0) {
     const cur = stack.pop()!;
     for (const n of state.nodes) {
       if (n.parentId === cur) {
-        descendantCount++;
+        if (n.type === "stem" || n.type === "meristem") {
+          descendantStems++;
+        }
         stack.push(n.id);
       }
     }
   }
-  const wood = Math.min(1.0, (node.age ?? 0) / 80);
-  return Math.max(1.2, Math.sqrt(descendantCount + 1) * 1.35 + wood * 1.8);
+  const wood = Math.min(1.0, (node.age ?? 0) / 90);
+  const baseT = 1.15 + Math.pow(descendantStems, 0.42) * 0.75 + wood * 0.35;
+  const flare = node.depth === 0 ? 3.8 : node.depth === 1 ? 2.0 : 0;
+  return Math.max(1.1, baseT + flare);
 }
 
 export interface WireBendInfo {
@@ -308,6 +312,7 @@ export function bendStemWithWire(
     return {
       ...n,
       hasWire: true,
+      wireAge: n.hasWire ? (n.wireAge ?? 0) : 0,
       wireCurvature: newBend,
       wireAngleOffset: newBend,
       barkFracture,
@@ -330,6 +335,74 @@ export function bendStemWithWire(
       thickness,
     },
   });
+}
+
+export interface WireRemovalInfo {
+  removed: boolean;
+  springback: number;
+  lignification: number;
+  nodeId: number;
+  hadWireBite: boolean;
+}
+
+/**
+ * Removes bonsai wire from a branch (Harigane-hazushi / 針金外し).
+ * If removed before secondary wood lignification completes (~25 steps),
+ * the branch springs back (Modori / 戻り) proportionally towards its unbent shape.
+ * If wire was left on past the bite threshold (>35 steps), permanent wire scars remain.
+ */
+export function removeWire(
+  state: PlantState,
+  targetNodeId: number
+): { state: PlantState; info: WireRemovalInfo } {
+  const targetNode = state.nodes.find((n) => n.id === targetNodeId);
+  if (!targetNode || !targetNode.hasWire) {
+    return {
+      state,
+      info: {
+        removed: false,
+        springback: 0,
+        lignification: 1,
+        nodeId: targetNodeId,
+        hadWireBite: false,
+      },
+    };
+  }
+
+  const wireAge = targetNode.wireAge ?? 0;
+  // Lignification sets over ~25 growth steps
+  const lignification = Math.min(1.0, wireAge / 25);
+  // Modori: springback fraction is inversely proportional to lignification
+  const springback = 1.0 - lignification;
+  const currentBend = targetNode.wireCurvature ?? targetNode.wireAngleOffset ?? 0;
+  const remainingBend = currentBend * (1.0 - springback);
+  const hadWireBite = Boolean(targetNode.hasWireBite);
+
+  const updatedNodes = state.nodes.map((n) => {
+    if (n.id !== targetNodeId) return n;
+    return {
+      ...n,
+      hasWire: false,
+      wireAge: 0,
+      wireCurvature: remainingBend,
+      wireAngleOffset: remainingBend,
+      barkFracture: Math.max(0, (n.barkFracture ?? 0) * 0.5),
+    };
+  });
+
+  return {
+    state: {
+      ...state,
+      nodes: updatedNodes,
+    },
+    info: {
+      removed: true,
+      springback,
+      lignification,
+      nodeId: targetNodeId,
+      hadWireBite,
+    },
+  };
 }
 
 // Retain legacy helper for backwards compatibility

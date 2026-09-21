@@ -31,9 +31,9 @@ export const japaneseBonsai: SpeciesDef = {
   version: "1.0.0",
   traitRanges: {
     vigor: [0.6, 0.8],         // slow, controlled growth
-    angle: [15, 25],           // tight branching angle
+    angle: [32, 48],           // open, balanced classical branching angles
     decay: [0.08, 0.12],       // moderate resource decay
-    lenScale: [20, 35],        // compact segment lengths
+    lenScale: [24, 40],        // elegant internode segment lengths
   },
   hiddenTraits: {
     budActivationThreshold: 0.3,
@@ -202,7 +202,7 @@ export const bunjingiPine: SpeciesDef = {
   version: "1.0.0",
   traitRanges: {
     vigor: [0.7, 0.9],
-    angle: [14, 24],
+    angle: [28, 42],
     decay: [0.07, 0.11],
     lenScale: [35, 55],
   },
@@ -293,41 +293,77 @@ export function generateGenomeForSpecies(
   let stiffness = 1.0;
 
   if (species.id === "japanese-bonsai") {
-    leafShape = prng.random() < 0.6 ? 4 : 2;
-    inflorescence = 0;
-    barkRoughness = prng.float(0.4, 0.7);
-    thornDensity = prng.float(0.0, 0.1);
+    leafShape = 4; // Authentic pine needle fascicles
+    inflorescence = 0; // Pine conelet
+    barkRoughness = prng.float(0.55, 0.8);
+    thornDensity = 0.0;
     vineMode = 0.0;
-    petalCount = prng.int(4, 6);
-    sepalCount = 5;
-    stamenCount = prng.int(6, 10);
+    petalCount = 4;
+    sepalCount = 4;
+    stamenCount = 6;
     symmetry = 0;
-    curl = prng.float(0.2, 0.5);
-    stiffness = prng.float(1.1, 1.7);
+    curl = prng.float(0.2, 0.4);
+    stiffness = prng.float(1.2, 1.7);
+  } else if (species.id === "acer-palmatum") {
+    leafShape = 1; // Authentic Momiji 5-lobed palmate maple leaf
+    inflorescence = 5; // Delicate reddish corymb
+    barkRoughness = prng.float(0.25, 0.42);
+    thornDensity = 0.0;
+    vineMode = 0.0;
+    petalCount = 5;
+    sepalCount = 5;
+    stamenCount = 8;
+    symmetry = 0;
+    curl = prng.float(0.1, 0.25);
+    stiffness = prng.float(0.9, 1.25);
+  } else if (species.id === "kengai-cascade") {
+    leafShape = 5; // Shimpaku Juniper scale foliage pads
+    inflorescence = 0; // Juniper berry / bud
+    barkRoughness = prng.float(0.5, 0.75);
+    thornDensity = 0.0;
+    vineMode = 0.0;
+    petalCount = 3;
+    sepalCount = 3;
+    stamenCount = 4;
+    symmetry = 0;
+    curl = prng.float(0.3, 0.6);
+    stiffness = prng.float(1.1, 1.5);
+  } else if (species.id === "bunjingi-pine") {
+    leafShape = 4; // Refined slender pine needle bundles
+    inflorescence = 0; // Solitary conelet
+    barkRoughness = prng.float(0.6, 0.85);
+    thornDensity = 0.0;
+    vineMode = 0.0;
+    petalCount = 4;
+    sepalCount = 4;
+    stamenCount = 6;
+    symmetry = 0;
+    curl = prng.float(0.25, 0.5);
+    stiffness = prng.float(1.15, 1.6);
   } else if (species.id === "zen-bamboo") {
-    leafShape = prng.random() < 0.7 ? 0 : 1;
-    inflorescence = 3;
-    barkRoughness = prng.float(0.1, 0.25);
+    leafShape = 6; // Long lanceolate bamboo blades
+    inflorescence = 0;
+    barkRoughness = prng.float(0.1, 0.22);
     thornDensity = 0.0;
     vineMode = prng.float(0.0, 0.05);
     petalCount = 3;
     sepalCount = 3;
     stamenCount = 6;
     symmetry = 0;
-    curl = prng.float(0.0, 0.15);
-    stiffness = prng.float(0.9, 1.4);
+    curl = prng.float(0.0, 0.12);
+    stiffness = prng.float(0.95, 1.35);
   } else if (species.id === "sakura-orchid") {
-    leafShape = prng.random() < 0.5 ? 5 : 6;
-    inflorescence = prng.random() < 0.5 ? 1 : 2;
-    barkRoughness = prng.float(0.15, 0.35);
+    leafShape = 7; // Serrate Sakura ovate leaves
+    inflorescence = 1; // Authentic Sakura blossom with notched petals & golden stamens
+    barkRoughness = prng.float(0.2, 0.35);
     thornDensity = 0.0;
-    vineMode = prng.float(0.05, 0.2);
-    petalCount = prng.int(5, 8);
-    sepalCount = prng.int(4, 6);
-    stamenCount = prng.int(8, 14);
-    symmetry = prng.random() < 0.4 ? 1 : 0;
-    curl = prng.float(0.1, 0.3);
-    stiffness = prng.float(0.55, 1.0);
+    vineMode = prng.float(0.02, 0.12);
+    petalCount = 5; // Classical 5-petal Cherry blossom
+    sepalCount = 5;
+    stamenCount = prng.int(12, 18);
+    symmetry = 0;
+    curl = prng.float(0.1, 0.25);
+    stiffness = prng.float(0.8, 1.1);
   }
 
   return {

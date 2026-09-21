@@ -193,7 +193,7 @@ function growOnce(state, prng) {
     budbreakStep(newState, prng);
     epicormicStep(newState, prng);
   }
-  if (season < 140 && newState.step % 5 === 0) {
+  if (season < 140 && newState.step % 6 === 0) {
     spawnLeavesOnBranches(newState, prng);
   }
   if (season === 140) {
@@ -202,10 +202,28 @@ function growOnce(state, prng) {
   if (season === Math.floor(DEFAULT_CYCLE_LENGTH * 0.9)) {
     newState.resources = { energy: 0, water: 0, structural: 0 };
   }
+  const moistureFactor = Math.max(0.4, newState.soilMoisture ?? 0.5);
+  const plantVigor = Math.max(0.3, expressTrait(newState.genome, "vigor") || 0.5);
   newState.nodes.forEach((n, i) => {
     if (n.age !== undefined) {
       const clone = getClone(n);
       clone.age++;
+      if (clone.type === "leaf" || clone.type === "flower") {
+        const advanceRate = clone.type === "leaf" ? 0.05 : 0.035;
+        clone.growthProgress = Math.min(1, (clone.growthProgress ?? 0.08) + advanceRate * moistureFactor);
+      }
+      if (clone.isCut && !clone.isJin) {
+        const healRate = 0.035 * moistureFactor * plantVigor;
+        clone.callusStage = Math.min(1, (clone.callusStage ?? 0) + healRate);
+        clone.callusSwelling = Math.min(1, (clone.callusSwelling ?? 0) + healRate * 1.3);
+      }
+      if (clone.hasWire && !clone.isJin) {
+        clone.wireAge = (clone.wireAge ?? 0) + 1;
+        if (clone.wireAge > 35) {
+          clone.hasWireBite = true;
+          clone.wireBiteSeverity = Math.min(1, (clone.wireAge - 35) / 20);
+        }
+      }
       newState.nodes[i] = clone;
     }
   });
@@ -286,6 +304,7 @@ function growOnce(state, prng) {
         targetLength: expressTrait(g, "flowerRadius"),
         v: 0,
         budState: "dormant",
+        growthProgress: 0.06,
         isCut: false,
         resourceProduction: 0,
         shade: tip.shade,
@@ -332,18 +351,19 @@ function growOnce(state, prng) {
     const apicalBrake = 1 / (1 + expressTrait(g, "apicalDominance") * tip.depth * 0.15);
     const competitionBrake = 30 / (30 + tips.length * 0.5);
     const shadeFactor = Math.max(0.2, 1 - tip.shade);
-    const branchChance = safeV * 0.4 * energyFactor * densityBrake * apicalBrake * competitionBrake * shadeFactor;
+    const branchChance = safeV * 0.25 * energyFactor * densityBrake * apicalBrake * competitionBrake * shadeFactor;
     const nBranches = prng.random() < branchChance ? 2 : 1;
     for (let b = 0;b < nBranches; b++) {
-      const spread = expressTrait(g, "angle") * Math.PI / 180 * Math.max(0.3, 1 - expressTrait(g, "vineMode") * 0.7);
-      const direction = nBranches === 1 ? (prng.random() - 0.5) * 0.2 : b === 0 ? -spread : spread;
+      const spread = expressTrait(g, "angle") * Math.PI / 180 * Math.max(0.4, 1 - expressTrait(g, "vineMode") * 0.7);
+      const direction = nBranches === 1 ? (prng.random() - 0.5) * 0.15 : b === 0 ? -spread : spread;
       let nextAngle = normalizeAngle(angle + direction);
       if (nextAngle > 0)
         nextAngle = 0;
       if (nextAngle < -Math.PI)
         nextAngle = -Math.PI;
       const daughterV = safeV - (expressTrait(g, "decay") + prng.random() * expressTrait(g, "decay") * 0.5);
-      const daughterTargetLen = expressTrait(g, "lenScale") * Math.pow(Math.max(0, daughterV), 1.2) * (1 + expressTrait(g, "vineMode") * 0.5);
+      const lenScaleVal = expressTrait(g, "lenScale");
+      const daughterTargetLen = Math.max(14, lenScaleVal * Math.pow(Math.max(0.2, daughterV), 0.75) * (1 + expressTrait(g, "vineMode") * 0.5));
       nextNodes.push({
         id: -(newState.idCounter++ * 100 + b),
         parentId: tip.id,
@@ -387,6 +407,7 @@ function growOnce(state, prng) {
         targetLength: 15,
         v: 0,
         budState: "dormant",
+        growthProgress: 0.08,
         isCut: false,
         resourceProduction: 0.1 + prng.random() * 0.2,
         shade: tip.shade,
@@ -470,6 +491,7 @@ function growOnce(state, prng) {
   if (season >= 180) {
     newState.nodes = newState.nodes.filter((n) => !(n.fallState === "falling" && (n.fallAge ?? 0) > MAX_FALL_STEPS));
   }
+  calculateReactionWoodAndWeight(newState);
   return newState;
 }
 function budActivation(state, prng) {
@@ -507,10 +529,12 @@ function budActivation(state, prng) {
       return;
     if (n.depth < 1)
       return;
+    if (n.length < 10)
+      return;
     const hasBudChild = nodes.some((c) => c.parentId === n.id && (c.type === "bud" || c.type === "meristem"));
     if (hasBudChild)
       return;
-    if (prng.random() > 0.35 * densityBrakeBud)
+    if (prng.random() > 0.08 * densityBrakeBud)
       return;
     const endX = n.x + Math.cos(n.angle) * n.targetLength;
     const endY = n.y + Math.sin(n.angle) * n.targetLength;
@@ -556,6 +580,7 @@ function budActivation(state, prng) {
         targetLength: 15,
         v: 0,
         budState: "dormant",
+        growthProgress: 0.08,
         isCut: false,
         resourceProduction: 0.1 + prng.random() * 0.2,
         shade: n.shade,
@@ -587,13 +612,15 @@ function spawnLeavesOnBranches(state, prng) {
       return;
     if (n.age < 2)
       return;
-    const hasLeafChild = nodes.some((c) => c.parentId === n.id && c.type === "leaf");
-    if (hasLeafChild)
+    const leafChildren = nodes.filter((c) => c.parentId === n.id && c.type === "leaf");
+    const maxLeavesForStem = Math.min(3, Math.max(1, Math.floor(n.length / 10)));
+    if (leafChildren.length >= maxLeavesForStem)
       return;
     if (prng.random() > expressTrait(g, "leafDensity") * 0.95)
       return;
-    const endX = n.x + Math.cos(n.angle) * n.length;
-    const endY = n.y + Math.sin(n.angle) * n.length;
+    const attachT = 0.35 + 0.55 * (leafChildren.length / maxLeavesForStem);
+    const endX = n.x + Math.cos(n.angle) * n.length * attachT;
+    const endY = n.y + Math.sin(n.angle) * n.length * attachT;
     const side = prng.random() < 0.5 ? -1 : 1;
     newLeaves.push({
       id: -state.idCounter++,
@@ -609,6 +636,7 @@ function spawnLeavesOnBranches(state, prng) {
       targetLength: 12,
       v: 0,
       budState: "dormant",
+      growthProgress: 0.08,
       isCut: false,
       resourceProduction: 0.1 + prng.random() * 0.2,
       shade: n.shade,
@@ -619,7 +647,8 @@ function spawnLeavesOnBranches(state, prng) {
       hasThorns: false,
       fruitAge: 0,
       fallState: "attached",
-      fallSeed: prng.random()
+      fallSeed: prng.random(),
+      attachT
     });
   });
   if (nodes.length + newLeaves.length <= MAX_TOTAL_NODES) {
@@ -651,6 +680,57 @@ function triggerAbscissionIfDue(state, season, prng) {
       n.fallRotSpeed = (prng.random() - 0.5) * 0.16;
       n.fallSwayPhase = prng.random() * Math.PI * 2;
       n.fallAge = 0;
+    }
+  }
+}
+function calculateReactionWoodAndWeight(state) {
+  const nodes = state.nodes;
+  if (!nodes || nodes.length === 0)
+    return;
+  const stiffness = Math.max(0.5, expressTrait(state.genome, "stiffness") || 1);
+  const leafSize = Math.max(0.5, expressTrait(state.genome, "leafSize") || 1);
+  const flowerRad = Math.max(3, expressTrait(state.genome, "flowerRadius") || 8);
+  const childrenMap = new Map;
+  for (const n of nodes) {
+    if (n.parentId !== null) {
+      let list = childrenMap.get(n.parentId);
+      if (!list) {
+        list = [];
+        childrenMap.set(n.parentId, list);
+      }
+      list.push(n);
+    }
+  }
+  const sorted = [...nodes].sort((a, b) => (b.depth ?? 0) - (a.depth ?? 0));
+  for (const n of sorted) {
+    let ownWeight = 0;
+    if (n.type === "leaf") {
+      const p = n.growthProgress ?? 0.8;
+      ownWeight = 0.16 * leafSize * (n.leafSizeJitter ?? 1) * p;
+    } else if (n.type === "flower") {
+      const p = n.growthProgress ?? 0.8;
+      ownWeight = 0.32 * (flowerRad / 8) * p;
+    } else if (n.type === "stem" || n.type === "meristem") {
+      const approxThick = Math.max(1, 4.5 / (1 + (n.depth ?? 0) * 0.45));
+      ownWeight = 0.02 * n.length * approxThick;
+    }
+    const children = childrenMap.get(n.id) || [];
+    let subtreeWeight = ownWeight;
+    for (const c of children) {
+      subtreeWeight += c.distalWeight ?? 0;
+    }
+    n.distalWeight = subtreeWeight;
+    if (n.type === "stem" || n.type === "meristem") {
+      const approxThick = Math.max(0.8, 3.5 / (1 + (n.depth ?? 0) * 0.4));
+      const flexuralResistance = Math.pow(approxThick, 1.8) * stiffness * 1.8;
+      const cosHorizontal = Math.abs(Math.cos(n.angle));
+      const rawSag = subtreeWeight / (flexuralResistance + 0.4) * 0.09 * cosHorizontal;
+      const lignification = Math.min(0.8, (n.age ?? 0) / 40);
+      const netSag = Math.min(0.12, Math.max(0, rawSag * (1 - lignification)));
+      const sign = Math.cos(n.angle) >= 0 ? 1 : -1;
+      n.reactionWoodSag = sign * netSag;
+    } else {
+      n.reactionWoodSag = 0;
     }
   }
 }
@@ -755,6 +835,8 @@ function pruneNodeAt(state, targetNodeId, t) {
   targetNode.length = Math.max(minStub, originalLength * cutT);
   targetNode.targetLength = targetNode.length;
   targetNode.isCut = true;
+  targetNode.callusStage = 0;
+  targetNode.callusSwelling = 0;
   targetNode.terminal = false;
   targetNode.v = 0;
   if (targetNode.type === "meristem")
@@ -781,8 +863,8 @@ function pruneNodeAt(state, targetNodeId, t) {
   }
   newState.nodes = newState.nodes.filter((n) => !toRemove.has(n.id));
   const isBroken = Boolean(targetNode.isBroken);
-  const waterLoss = isBroken ? thickness * 6.5 : thickness > 3 ? thickness * 3.8 : 1.2;
-  const energyLoss = isBroken ? thickness * 4.5 : thickness > 3 ? thickness * 2.2 : 0.8;
+  const waterLoss = isBroken ? thickness * 6.5 : thickness > 2.2 ? thickness * 3.8 : 1.2;
+  const energyLoss = isBroken ? thickness * 4.5 : thickness > 2.2 ? thickness * 2.2 : 0.8;
   if (newState.resources) {
     newState.resources = {
       energy: Math.max(0, newState.resources.energy - energyLoss),
@@ -820,39 +902,6 @@ function pruneNodeAt(state, targetNodeId, t) {
         awakenedAny = true;
       }
     }
-  }
-  if (!awakenedAny && targetNode.length > 0.8 && newState.nodes.length < MAX_TOTAL_NODES) {
-    const stubT = 0.7;
-    const budX = targetNode.x + Math.cos(targetNode.angle) * targetNode.length * stubT;
-    const budY = targetNode.y + Math.sin(targetNode.angle) * targetNode.length * stubT;
-    const side = Math.random() < 0.5 ? -1 : 1;
-    newState.nodes.push({
-      id: -newState.idCounter++,
-      parentId: targetNode.id,
-      x: budX,
-      y: budY,
-      angle: normalizeAngle(targetNode.angle + side * 1.1),
-      depth: targetNode.depth + 1,
-      type: "meristem",
-      terminal: true,
-      age: 0,
-      length: 0,
-      targetLength: expressTrait(state.genome, "lenScale") * 0.9,
-      v: Math.max(0.4, expressTrait(state.genome, "vigor") * 0.7),
-      budState: "active",
-      isCut: false,
-      resourceProduction: 0,
-      shade: targetNode.shade,
-      curve: (Math.random() - 0.5) * 0.3,
-      leafSizeJitter: 0,
-      leafShapeJitter: 0,
-      leafHueShift: 0,
-      hasThorns: false,
-      fruitAge: 0,
-      fallState: "attached",
-      fallSeed: Math.random(),
-      attachT: stubT
-    });
   }
   newState.step++;
   newState.cutAnimTime = 1 + (thickness > 3.5 ? 0.5 : 0);
@@ -914,6 +963,7 @@ function freshState(genome, species, options = {}) {
     timelapseFrames: [],
     isRecording: false
   };
+  calculateReactionWoodAndWeight(initialState);
   return initialState;
 }
 
@@ -925,9 +975,9 @@ var japaneseBonsai = {
   version: "1.0.0",
   traitRanges: {
     vigor: [0.6, 0.8],
-    angle: [15, 25],
+    angle: [32, 48],
     decay: [0.08, 0.12],
-    lenScale: [20, 35]
+    lenScale: [24, 40]
   },
   hiddenTraits: {
     budActivationThreshold: 0.3,
@@ -1055,7 +1105,7 @@ var bunjingiPine = {
   version: "1.0.0",
   traitRanges: {
     vigor: [0.7, 0.9],
-    angle: [14, 24],
+    angle: [28, 42],
     decay: [0.07, 0.11],
     lenScale: [35, 55]
   },
@@ -1122,41 +1172,77 @@ function generateGenomeForSpecies(species, seed) {
   let curl = 0.2;
   let stiffness = 1;
   if (species.id === "japanese-bonsai") {
-    leafShape = prng.random() < 0.6 ? 4 : 2;
+    leafShape = 4;
     inflorescence = 0;
-    barkRoughness = prng.float(0.4, 0.7);
-    thornDensity = prng.float(0, 0.1);
+    barkRoughness = prng.float(0.55, 0.8);
+    thornDensity = 0;
     vineMode = 0;
-    petalCount = prng.int(4, 6);
-    sepalCount = 5;
-    stamenCount = prng.int(6, 10);
+    petalCount = 4;
+    sepalCount = 4;
+    stamenCount = 6;
     symmetry = 0;
-    curl = prng.float(0.2, 0.5);
-    stiffness = prng.float(1.1, 1.7);
+    curl = prng.float(0.2, 0.4);
+    stiffness = prng.float(1.2, 1.7);
+  } else if (species.id === "acer-palmatum") {
+    leafShape = 1;
+    inflorescence = 5;
+    barkRoughness = prng.float(0.25, 0.42);
+    thornDensity = 0;
+    vineMode = 0;
+    petalCount = 5;
+    sepalCount = 5;
+    stamenCount = 8;
+    symmetry = 0;
+    curl = prng.float(0.1, 0.25);
+    stiffness = prng.float(0.9, 1.25);
+  } else if (species.id === "kengai-cascade") {
+    leafShape = 5;
+    inflorescence = 0;
+    barkRoughness = prng.float(0.5, 0.75);
+    thornDensity = 0;
+    vineMode = 0;
+    petalCount = 3;
+    sepalCount = 3;
+    stamenCount = 4;
+    symmetry = 0;
+    curl = prng.float(0.3, 0.6);
+    stiffness = prng.float(1.1, 1.5);
+  } else if (species.id === "bunjingi-pine") {
+    leafShape = 4;
+    inflorescence = 0;
+    barkRoughness = prng.float(0.6, 0.85);
+    thornDensity = 0;
+    vineMode = 0;
+    petalCount = 4;
+    sepalCount = 4;
+    stamenCount = 6;
+    symmetry = 0;
+    curl = prng.float(0.25, 0.5);
+    stiffness = prng.float(1.15, 1.6);
   } else if (species.id === "zen-bamboo") {
-    leafShape = prng.random() < 0.7 ? 0 : 1;
-    inflorescence = 3;
-    barkRoughness = prng.float(0.1, 0.25);
+    leafShape = 6;
+    inflorescence = 0;
+    barkRoughness = prng.float(0.1, 0.22);
     thornDensity = 0;
     vineMode = prng.float(0, 0.05);
     petalCount = 3;
     sepalCount = 3;
     stamenCount = 6;
     symmetry = 0;
-    curl = prng.float(0, 0.15);
-    stiffness = prng.float(0.9, 1.4);
+    curl = prng.float(0, 0.12);
+    stiffness = prng.float(0.95, 1.35);
   } else if (species.id === "sakura-orchid") {
-    leafShape = prng.random() < 0.5 ? 5 : 6;
-    inflorescence = prng.random() < 0.5 ? 1 : 2;
-    barkRoughness = prng.float(0.15, 0.35);
+    leafShape = 7;
+    inflorescence = 1;
+    barkRoughness = prng.float(0.2, 0.35);
     thornDensity = 0;
-    vineMode = prng.float(0.05, 0.2);
-    petalCount = prng.int(5, 8);
-    sepalCount = prng.int(4, 6);
-    stamenCount = prng.int(8, 14);
-    symmetry = prng.random() < 0.4 ? 1 : 0;
-    curl = prng.float(0.1, 0.3);
-    stiffness = prng.float(0.55, 1);
+    vineMode = prng.float(0.02, 0.12);
+    petalCount = 5;
+    sepalCount = 5;
+    stamenCount = prng.int(12, 18);
+    symmetry = 0;
+    curl = prng.float(0.1, 0.25);
+    stiffness = prng.float(0.8, 1.1);
   }
   return {
     vigor: randAlleles(species.traitRanges.vigor[0], species.traitRanges.vigor[1]),
@@ -1234,90 +1320,394 @@ function renderWoodBarkTexture(ctx, x1, y1, x2, y2, thick, woodiness, cx, cy) {
 }
 
 // src/render/morphology.ts
-function drawModularLeaf(ctx, morphology, size, color, highlightColor) {
+function drawModularLeaf(ctx, morphology, size, color, highlightColor, progress = 1) {
+  const p = Math.max(0.08, Math.min(1, progress));
   ctx.save();
-  const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, size);
+  if (p < 0.28) {
+    const budScale = p / 0.28;
+    const bLen = Math.max(2.5, size * 0.35 * budScale);
+    const bWid = Math.max(1.2, size * 0.18 * budScale);
+    ctx.fillStyle = "rgba(163, 230, 53, 0.9)";
+    ctx.strokeStyle = "rgba(77, 124, 15, 0.7)";
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.ellipse(0, -bLen * 0.5, bWid, bLen * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -bLen);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  const unfurl = (p - 0.28) / 0.72;
+  const effSize = size * (0.35 + 0.65 * unfurl);
+  const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, effSize);
   grad.addColorStop(0, highlightColor);
   grad.addColorStop(1, color);
   ctx.fillStyle = grad;
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.25)";
-  ctx.lineWidth = 0.75;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.22)";
+  ctx.lineWidth = 0.7;
   if (morphology === "needle") {
+    ctx.save();
+    ctx.fillStyle = "rgba(120, 80, 40, 0.75)";
+    ctx.beginPath();
+    ctx.ellipse(0, -effSize * 0.1, effSize * 0.12, effSize * 0.16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const needleLen = effSize * 1.85;
+    const spread = 0.22 + 0.18 * unfurl;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.15;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(0, -effSize * 0.15);
+    ctx.quadraticCurveTo(-needleLen * 0.15, -needleLen * 0.55, -needleLen * spread, -needleLen);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, -effSize * 0.15);
+    ctx.quadraticCurveTo(needleLen * 0.15, -needleLen * 0.55, needleLen * spread, -needleLen);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -effSize * 0.2);
+    ctx.lineTo(-needleLen * spread * 0.85, -needleLen * 0.85);
+    ctx.stroke();
+    ctx.restore();
+  } else if (morphology === "scale") {
+    ctx.save();
+    const fanCount = 5;
+    for (let f = 0;f < fanCount; f++) {
+      ctx.save();
+      const fAngle = (f - 2) * Math.PI / 8;
+      ctx.rotate(fAngle);
+      ctx.beginPath();
+      ctx.ellipse(0, -effSize * 0.45, effSize * 0.18, effSize * 0.38, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  } else if (morphology === "palmate") {
+    ctx.save();
+    ctx.strokeStyle = "rgba(185, 28, 28, 0.7)";
+    ctx.lineWidth = 0.85;
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(0, -size * 1.8);
+    ctx.lineTo(0, -effSize * 0.3);
     ctx.stroke();
-  } else if (morphology === "palmate") {
-    for (let i = -2;i <= 2; i++) {
+    ctx.translate(0, -effSize * 0.3);
+    const lobeAngles = [-0.62, -0.32, 0, 0.32, 0.62];
+    const lobeScales = [0.65, 0.9, 1, 0.9, 0.65];
+    for (let i = 0;i < lobeAngles.length; i++) {
       ctx.save();
-      ctx.rotate(i * Math.PI / 6);
+      ctx.rotate(lobeAngles[i] * unfurl);
+      const lScale = lobeScales[i] * effSize;
       ctx.beginPath();
-      ctx.ellipse(0, -size * 0.5, size * 0.2, size * 0.6, 0, 0, Math.PI * 2);
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(lScale * 0.22, -lScale * 0.45, lScale * 0.08, -lScale * 0.9);
+      ctx.lineTo(0, -lScale);
+      ctx.lineTo(-lScale * 0.08, -lScale * 0.9);
+      ctx.quadraticCurveTo(-lScale * 0.22, -lScale * 0.45, 0, 0);
       ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.lineWidth = 0.55;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -lScale * 0.85);
       ctx.stroke();
       ctx.restore();
     }
-  } else if (morphology === "pinnate") {
+    ctx.restore();
+  } else if (morphology === "lanceolate") {
+    ctx.save();
+    const bLen = effSize * 1.6;
+    const bWid = effSize * 0.32;
     ctx.beginPath();
-    ctx.ellipse(0, 0, size * 0.6, size * 0.35, 0, 0, Math.PI * 2);
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(bWid * 1.1, -bLen * 0.35, bWid * 0.8, -bLen * 0.75, 0, -bLen);
+    ctx.bezierCurveTo(-bWid * 0.8, -bLen * 0.75, -bWid * 1.1, -bLen * 0.35, 0, 0);
     ctx.fill();
     ctx.stroke();
-    for (let i = -2;i <= 2; i++) {
-      if (i === 0)
-        continue;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.lineWidth = 0.65;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -bLen * 0.92);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+    ctx.lineWidth = 0.4;
+    for (let v = -1;v <= 1; v += 2) {
       ctx.beginPath();
-      ctx.ellipse(i * size * 0.3, i * size * 0.1, size * 0.2, size * 0.12, 0.4, 0, Math.PI * 2);
+      ctx.moveTo(v * bWid * 0.25, -bLen * 0.15);
+      ctx.quadraticCurveTo(v * bWid * 0.5, -bLen * 0.5, 0, -bLen * 0.85);
+      ctx.stroke();
+    }
+    ctx.restore();
+  } else if (morphology === "serrate") {
+    ctx.save();
+    const lLen = effSize * 1.25;
+    const lWid = effSize * 0.52;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(lWid * 1.15, -lLen * 0.3, lWid * 0.85, -lLen * 0.75, 0, -lLen);
+    ctx.bezierCurveTo(-lWid * 0.85, -lLen * 0.75, -lWid * 1.15, -lLen * 0.3, 0, 0);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.14)";
+    ctx.lineWidth = 0.55;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -lLen * 0.9);
+    ctx.stroke();
+    for (let vi = 1;vi <= 3; vi++) {
+      const vy = -lLen * (vi / 4);
+      ctx.beginPath();
+      ctx.moveTo(0, vy);
+      ctx.lineTo(lWid * 0.4, vy - lLen * 0.08);
+      ctx.moveTo(0, vy);
+      ctx.lineTo(-lWid * 0.4, vy - lLen * 0.08);
+      ctx.stroke();
+    }
+    ctx.restore();
+  } else if (morphology === "pinnate") {
+    ctx.save();
+    const rLen = effSize * 1.3;
+    ctx.beginPath();
+    ctx.ellipse(0, -rLen * 0.85, effSize * 0.25, effSize * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    const pairs = 3;
+    for (let i = 1;i <= pairs; i++) {
+      const py = -rLen * (i / (pairs + 1));
+      const pSpan = effSize * 0.55;
+      ctx.beginPath();
+      ctx.ellipse(-pSpan, py, effSize * 0.22, effSize * 0.14, 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(pSpan, py, effSize * 0.22, effSize * 0.14, -0.35, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
+    ctx.restore();
   } else if (morphology === "lobed") {
     ctx.beginPath();
-    ctx.moveTo(0, -size * 0.8);
-    ctx.bezierCurveTo(size * 0.6, -size * 0.4, size * 0.8, size * 0.4, 0, size * 0.8);
-    ctx.bezierCurveTo(-size * 0.8, size * 0.4, -size * 0.6, -size * 0.4, 0, -size * 0.8);
+    ctx.moveTo(0, -effSize * 0.85);
+    ctx.bezierCurveTo(effSize * 0.7, -effSize * 0.45, effSize * 0.8, effSize * 0.4, 0, effSize * 0.85);
+    ctx.bezierCurveTo(-effSize * 0.8, effSize * 0.4, -effSize * 0.7, -effSize * 0.45, 0, -effSize * 0.85);
     ctx.fill();
     ctx.stroke();
   } else {
     ctx.beginPath();
-    ctx.ellipse(0, 0, size * 0.7, size * 0.4, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, -effSize * 0.5, effSize * 0.38, effSize * 0.65, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.16)";
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -effSize * 0.95);
     ctx.stroke();
   }
   ctx.restore();
 }
-function drawModularFlower(ctx, morphology, petalCount, radius, petalColor, stamenColor) {
+function drawModularFlower(ctx, morphology, petalCount, radius, petalColor, stamenColor, progress = 1) {
+  const p = Math.max(0.06, Math.min(1, progress));
   ctx.save();
-  const count = Math.max(3, Math.min(12, petalCount));
-  if (morphology === "umbel" || morphology === "compound") {
-    for (let f = 0;f < 5; f++) {
+  if (p < 0.32) {
+    const budFrac = p / 0.32;
+    const bRad = Math.max(2.5, radius * (0.35 + 0.25 * budFrac));
+    ctx.fillStyle = "rgba(46, 117, 43, 0.95)";
+    ctx.strokeStyle = "rgba(20, 83, 45, 0.8)";
+    ctx.lineWidth = 0.7;
+    for (let s = 0;s < 3; s++) {
       ctx.save();
-      const angle = f / 5 * Math.PI * 2;
-      ctx.translate(Math.cos(angle) * radius * 0.8, Math.sin(angle) * radius * 0.8);
-      drawSingleFloret(ctx, count, radius * 0.5, petalColor, stamenColor);
+      ctx.rotate(s * Math.PI * 2 / 3);
+      ctx.beginPath();
+      ctx.ellipse(0, -bRad * 0.5, bRad * 0.35, bRad * 0.65, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (budFrac > 0.4) {
+      ctx.fillStyle = petalColor;
+      ctx.beginPath();
+      ctx.arc(0, -bRad * 0.75, bRad * 0.28 * budFrac, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+  const bloomFrac = (p - 0.32) / 0.68;
+  const effRadius = radius * (0.45 + 0.55 * bloomFrac);
+  const count = Math.max(3, Math.min(12, petalCount));
+  if (morphology === "sakura") {
+    drawSakuraBlossom(ctx, effRadius, petalColor, stamenColor, bloomFrac);
+  } else if (morphology === "azalea") {
+    drawAzaleaBlossom(ctx, effRadius, petalColor, stamenColor, bloomFrac);
+  } else if (morphology === "ume") {
+    drawUmeBlossom(ctx, effRadius, petalColor, stamenColor, bloomFrac);
+  } else if (morphology === "umbel" || morphology === "compound") {
+    const floretCount = 5;
+    for (let f = 0;f < floretCount; f++) {
+      ctx.save();
+      const angle = f / floretCount * Math.PI * 2;
+      const dist = effRadius * 0.75 * bloomFrac;
+      ctx.translate(Math.cos(angle) * dist, Math.sin(angle) * dist);
+      drawSingleFloret(ctx, count, effRadius * 0.45, petalColor, stamenColor, bloomFrac);
       ctx.restore();
     }
   } else {
-    drawSingleFloret(ctx, count, radius, petalColor, stamenColor);
+    drawSingleFloret(ctx, count, effRadius, petalColor, stamenColor, bloomFrac);
   }
   ctx.restore();
 }
-function drawSingleFloret(ctx, count, radius, petalColor, stamenColor) {
+function drawSakuraBlossom(ctx, radius, petalColor, stamenColor, bloomFrac) {
+  ctx.fillStyle = "rgba(46, 117, 43, 0.75)";
+  for (let s = 0;s < 5; s++) {
+    ctx.save();
+    ctx.rotate(s * Math.PI * 2 / 5 + Math.PI / 5);
+    ctx.beginPath();
+    ctx.ellipse(0, -radius * 0.55, radius * 0.18, radius * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
   ctx.fillStyle = petalColor;
-  ctx.strokeStyle = "rgba(0,0,0,0.15)";
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(225, 29, 72, 0.2)";
+  ctx.lineWidth = 0.8;
+  const petalSpread = 0.3 + 0.7 * bloomFrac;
+  for (let i = 0;i < 5; i++) {
+    const angle = i / 5 * Math.PI * 2;
+    ctx.save();
+    ctx.rotate(angle);
+    const pLen = radius * petalSpread;
+    const pWid = radius * 0.46 * petalSpread;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(-pWid * 1.1, -pLen * 0.45, -pWid * 0.9, -pLen * 0.92, -pWid * 0.28, -pLen);
+    ctx.lineTo(0, -pLen * 0.86);
+    ctx.lineTo(pWid * 0.28, -pLen);
+    ctx.bezierCurveTo(pWid * 0.9, -pLen * 0.92, pWid * 1.1, -pLen * 0.45, 0, 0);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.fillStyle = "rgba(225, 29, 72, 0.55)";
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 0.24 * bloomFrac, 0, Math.PI * 2);
+  ctx.fill();
+  if (bloomFrac > 0.45) {
+    const stamenProg = (bloomFrac - 0.45) / 0.55;
+    const stamenLen = radius * 0.55 * stamenProg;
+    const stamenCount = 14;
+    for (let st = 0;st < stamenCount; st++) {
+      const stAngle = st / stamenCount * Math.PI * 2 + 0.12;
+      ctx.save();
+      ctx.rotate(stAngle);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -stamenLen);
+      ctx.stroke();
+      ctx.fillStyle = stamenColor;
+      ctx.beginPath();
+      ctx.arc(0, -stamenLen, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = "#86efac";
+    ctx.beginPath();
+    ctx.arc(0, 0, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+function drawAzaleaBlossom(ctx, radius, petalColor, stamenColor, bloomFrac) {
+  ctx.save();
+  const count = 5;
+  ctx.fillStyle = petalColor;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.15)";
+  ctx.lineWidth = 0.8;
   for (let i = 0;i < count; i++) {
     const angle = i / count * Math.PI * 2;
     ctx.save();
     ctx.rotate(angle);
     ctx.beginPath();
-    ctx.ellipse(0, -radius * 0.7, radius * 0.4, radius * 0.7, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, -radius * 0.65 * bloomFrac, radius * 0.42 * bloomFrac, radius * 0.65 * bloomFrac, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (bloomFrac > 0.5) {
+    ctx.fillStyle = "rgba(159, 18, 57, 0.6)";
+    for (let d = 0;d < 6; d++) {
+      const dx = (d % 3 - 1) * radius * 0.15;
+      const dy = -radius * 0.25 - (d > 2 ? radius * 0.12 : 0);
+      ctx.beginPath();
+      ctx.arc(dx, dy, 0.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (bloomFrac > 0.4) {
+    const sLen = radius * 0.85 * bloomFrac;
+    for (let s = -2;s <= 2; s++) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(s * radius * 0.25, -sLen * 0.4, s * radius * 0.35, -sLen);
+      ctx.stroke();
+      ctx.fillStyle = stamenColor;
+      ctx.beginPath();
+      ctx.arc(s * radius * 0.35, -sLen, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+function drawUmeBlossom(ctx, radius, petalColor, stamenColor, bloomFrac) {
+  ctx.save();
+  ctx.fillStyle = petalColor;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.16)";
+  ctx.lineWidth = 0.8;
+  for (let i = 0;i < 5; i++) {
+    const angle = i / 5 * Math.PI * 2;
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.arc(0, -radius * 0.55 * bloomFrac, radius * 0.42 * bloomFrac, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
   }
   ctx.fillStyle = stamenColor;
   ctx.beginPath();
-  ctx.arc(0, 0, radius * 0.3, 0, Math.PI * 2);
+  ctx.arc(0, 0, radius * 0.25 * bloomFrac, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+function drawSingleFloret(ctx, count, radius, petalColor, stamenColor, bloomFrac) {
+  ctx.fillStyle = petalColor;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.14)";
+  ctx.lineWidth = 0.8;
+  for (let i = 0;i < count; i++) {
+    const angle = i / count * Math.PI * 2;
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.ellipse(0, -radius * 0.65 * bloomFrac, radius * 0.35 * bloomFrac, radius * 0.65 * bloomFrac, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.fillStyle = stamenColor;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 0.28 * bloomFrac, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -1884,28 +2274,73 @@ function renderPlant(ctx, state, w, h, devOptions) {
     const grooveShadow = state.darkMode ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.65)";
     ctx.fillStyle = state.darkMode ? "#0b0f17" : "#544537";
     ctx.beginPath();
-    safeRoundRect(ctx, -420, 14, 840, 96, [12]);
+    safeRoundRect(ctx, -440, -68, 880, 224, [14]);
     ctx.fill();
     ctx.strokeStyle = state.darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.25)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.fillStyle = sandBg;
     ctx.beginPath();
-    safeRoundRect(ctx, -414, 17, 828, 90, [10]);
+    safeRoundRect(ctx, -434, -64, 868, 216, [10]);
     ctx.fill();
-    for (let gy = 23;gy <= 101; gy += 6) {
+    for (let gy = -56;gy <= 144; gy += 7) {
       ctx.strokeStyle = grooveColor;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
-      ctx.moveTo(-406, gy);
-      ctx.lineTo(406, gy);
+      ctx.moveTo(-424, gy);
+      ctx.lineTo(424, gy);
       ctx.stroke();
       ctx.strokeStyle = grooveShadow;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(-406, gy + 1);
-      ctx.lineTo(406, gy + 1);
+      ctx.moveTo(-424, gy + 1);
+      ctx.lineTo(424, gy + 1);
       ctx.stroke();
+    }
+    if (state.sandStrokes && state.sandStrokes.length > 0) {
+      for (const stroke of state.sandStrokes) {
+        if (!stroke.points || stroke.points.length < 2)
+          continue;
+        const pts = stroke.points;
+        const tines = [-9, -3, 3, 9];
+        for (const tineOffset of tines) {
+          ctx.save();
+          const tinePts = [];
+          for (let p = 0;p < pts.length; p++) {
+            const cur = pts[p];
+            const prev = pts[Math.max(0, p - 1)];
+            const next = pts[Math.min(pts.length - 1, p + 1)];
+            const dx = next.x - prev.x;
+            const dy = next.y - prev.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const nx = -dy / len;
+            const ny = dx / len;
+            tinePts.push({
+              x: cur.x + nx * tineOffset,
+              y: cur.y + ny * tineOffset
+            });
+          }
+          ctx.strokeStyle = state.darkMode ? "rgba(0, 0, 0, 0.65)" : "rgba(45, 30, 18, 0.42)";
+          ctx.lineWidth = 2.4;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.beginPath();
+          ctx.moveTo(tinePts[0].x, tinePts[0].y);
+          for (let p = 1;p < tinePts.length; p++) {
+            ctx.lineTo(tinePts[p].x, tinePts[p].y);
+          }
+          ctx.stroke();
+          ctx.strokeStyle = state.darkMode ? "rgba(255, 255, 255, 0.35)" : "rgba(255, 255, 255, 0.85)";
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(tinePts[0].x - 0.7, tinePts[0].y - 1);
+          for (let p = 1;p < tinePts.length; p++) {
+            ctx.lineTo(tinePts[p].x - 0.7, tinePts[p].y - 1);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
     }
     if (state.sandRipples && state.sandRipples.length > 0) {
       for (const rip of state.sandRipples) {
@@ -2195,17 +2630,28 @@ function renderPlant(ctx, state, w, h, devOptions) {
     }
     const kids = childrenByParent.get(n.id) ?? [];
     const childStems = kids.filter((c) => c.type === "stem" || c.type === "meristem");
-    let areaSum = 0.9;
-    for (const c of childStems) {
-      const ct = getThickness(c);
-      areaSum += ct * ct;
+    let thick;
+    if (childStems.length === 0) {
+      const wood = Math.min(1, (n.age || 0) / 90);
+      thick = (n.type === "meristem" ? 1.05 : 1.25) + wood * 0.35;
+    } else if (childStems.length === 1) {
+      const ct = getThickness(childStems[0]);
+      thick = ct + 0.16;
+    } else {
+      let sumP = 0;
+      for (const c of childStems) {
+        const ct = getThickness(c);
+        sumP += Math.pow(ct, 2.4);
+      }
+      thick = Math.pow(sumP, 1 / 2.4) + 0.22;
     }
-    const daVinci = Math.sqrt(areaSum);
-    const woodiness = Math.min(1, (n.age || 0) / 45);
-    const depthFactor = Math.max(0.35, 1 - n.depth / 8 * 0.45);
-    const thickness = Math.max(1.2, daVinci * 1.3 * depthFactor + woodiness * 1.8);
-    thicknessCache.set(n.id, thickness);
-    return thickness;
+    if (n.depth === 0) {
+      thick += 3.8;
+    } else if (n.depth === 1) {
+      thick += 2;
+    }
+    thicknessCache.set(n.id, thick);
+    return thick;
   }
   for (const n of state.nodes) {
     getWeight(n);
@@ -2247,8 +2693,9 @@ function renderPlant(ctx, state, w, h, devOptions) {
       const sagDistance = droop * length;
       const bendAngle = thickness < 2.5 ? droop * 0.4 : 0;
       const wireBend = n.wireCurvature ?? n.wireAngleOffset ?? 0;
-      const renderAngle = startAngle + wireBend + bendAngle;
-      const chordAngle = startAngle + wireBend * 0.5 + bendAngle;
+      const reactionSag = n.reactionWoodSag ?? 0;
+      const renderAngle = startAngle + wireBend + bendAngle + reactionSag;
+      const chordAngle = startAngle + wireBend * 0.5 + bendAngle + reactionSag * 0.5;
       const endX = startX + Math.cos(chordAngle) * length;
       const endY = startY + Math.sin(chordAngle) * length;
       const midX = (startX + endX) / 2;
@@ -2258,7 +2705,7 @@ function renderPlant(ctx, state, w, h, devOptions) {
       const organicSweep = (n.id % 7 - 3) * 0.015;
       const curvatureOffset = wireBend * length * 0.28;
       const controlX = midX + normalX * (organicSweep * length + curvatureOffset);
-      const controlY = midY + normalY * (organicSweep * length + curvatureOffset) + sagDistance * 0.35;
+      const controlY = midY + normalY * (organicSweep * length + curvatureOffset) + (sagDistance + Math.abs(reactionSag) * length * 0.3) * 0.35;
       const tr = {
         nodeId: n.id,
         startX,
@@ -2313,6 +2760,13 @@ function renderPlant(ctx, state, w, h, devOptions) {
         if (state.woodTexture !== false) {
           renderWoodBarkTexture(ctx, startX, startY, endX, endY, thickness, wood, controlX, controlY);
         }
+        if (n.parentId !== null && !n.isCut) {
+          const collarR = Math.max(1.8, thickness * 0.62);
+          ctx.fillStyle = `rgb(${r},${gr},${b})`;
+          ctx.beginPath();
+          ctx.arc(startX, startY, collarR, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       if (isWinterSeason && Math.abs(Math.sin(renderAngle)) < 0.72 && thickness >= 1.6) {
         ctx.save();
@@ -2345,6 +2799,30 @@ function renderPlant(ctx, state, w, h, devOptions) {
           ctx.beginPath();
           ctx.moveTo(pt.x - nx * halfW - tx / tLen * 1.5, pt.y - ny * halfW - ty / tLen * 1.5);
           ctx.lineTo(pt.x + nx * halfW + tx / tLen * 1.5, pt.y + ny * halfW + ty / tLen * 1.5);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      if (n.hasWireBite && !n.isJin) {
+        ctx.save();
+        const severity = n.wireBiteSeverity ?? 0.6;
+        ctx.strokeStyle = state.darkMode ? "rgba(0, 0, 0, 0.75)" : "rgba(35, 18, 8, 0.75)";
+        ctx.lineWidth = Math.max(1, thickness * 0.28 * severity);
+        ctx.lineCap = "round";
+        const coils = Math.max(3, Math.floor(length / 7));
+        for (let i = 1;i <= coils; i++) {
+          const t = i / (coils + 1);
+          const pt = quadBezierPoint(startX, startY, controlX, controlY, endX, endY, t);
+          const mt = 1 - t;
+          const tx = 2 * mt * (controlX - startX) + 2 * t * (endX - controlX);
+          const ty = 2 * mt * (controlY - startY) + 2 * t * (endY - controlY);
+          const tLen = Math.hypot(tx, ty) || 1;
+          const nx = -ty / tLen;
+          const ny = tx / tLen;
+          const halfW = thickness / 2 * 0.85;
+          ctx.beginPath();
+          ctx.moveTo(pt.x - nx * halfW - tx / tLen * 1.2, pt.y - ny * halfW - ty / tLen * 1.2);
+          ctx.lineTo(pt.x + nx * halfW + tx / tLen * 1.2, pt.y + ny * halfW + ty / tLen * 1.2);
           ctx.stroke();
         }
         ctx.restore();
@@ -2403,18 +2881,62 @@ function renderPlant(ctx, state, w, h, devOptions) {
           ctx.arc(endX + bDirX * 1.2, endY + bDirY * 1.2, Math.max(1.5, thickness * 0.35), 0, Math.PI * 2);
           ctx.fill();
         } else {
-          const callus = n.callusStage ?? 0.3;
-          ctx.fillStyle = "#65a30d";
-          ctx.beginPath();
-          ctx.arc(endX, endY, Math.max(2.4, thickness * 0.65 + callus * 1.5), 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#e2d9cc";
-          ctx.beginPath();
-          ctx.arc(endX, endY, Math.max(1.2, thickness * 0.4 * (1 - callus * 0.35)), 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = "#78350f";
-          ctx.lineWidth = 1;
-          ctx.stroke();
+          const callus = Math.max(0, Math.min(1, n.callusStage ?? 0));
+          const swelling = Math.max(0, Math.min(1, n.callusSwelling ?? 0));
+          if (callus >= 0.75) {
+            const knobRadius = Math.max(2.8, thickness * 0.75 + swelling * 2.8);
+            ctx.fillStyle = `rgb(${r},${gr},${b})`;
+            ctx.beginPath();
+            ctx.arc(endX, endY, knobRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = state.darkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(45, 25, 12, 0.4)";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(endX, endY, knobRadius * 0.65, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = state.darkMode ? "rgba(0, 0, 0, 0.6)" : "rgba(35, 18, 8, 0.7)";
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(endX - knobRadius * 0.25, endY);
+            ctx.lineTo(endX + knobRadius * 0.25, endY);
+            ctx.stroke();
+          } else if (callus >= 0.25) {
+            const collarRadius = Math.max(2.4, thickness * 0.65 + swelling * 1.8);
+            const coreRadius = Math.max(0.6, thickness * 0.4 * (1 - callus * 0.8));
+            ctx.fillStyle = `rgb(${Math.round(r * 0.85 + 40)},${Math.round(gr * 0.85 + 50)},${b})`;
+            ctx.beginPath();
+            ctx.arc(endX, endY, collarRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#65a30d";
+            ctx.beginPath();
+            ctx.arc(endX, endY, collarRadius * 0.72, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#e2d9cc";
+            ctx.beginPath();
+            ctx.arc(endX, endY, coreRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#78350f";
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+          } else {
+            const collarRadius = Math.max(2, thickness * 0.58);
+            const coreRadius = Math.max(1.1, thickness * 0.38);
+            ctx.fillStyle = "#65a30d";
+            ctx.beginPath();
+            ctx.arc(endX, endY, collarRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#fef08a";
+            ctx.beginPath();
+            ctx.arc(endX, endY, coreRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#854d0e";
+            ctx.lineWidth = 0.9;
+            ctx.stroke();
+            ctx.fillStyle = "rgba(245, 158, 11, 0.85)";
+            ctx.beginPath();
+            ctx.arc(endX + 0.5, endY + 0.5, Math.max(1, thickness * 0.22), 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
         ctx.restore();
       }
@@ -2439,11 +2961,29 @@ function renderPlant(ctx, state, w, h, devOptions) {
       }
     }
   }
-  const leafTypes = ["simple", "palmate", "pinnate", "lobed", "needle"];
-  const flowerTypes = ["solitary", "raceme", "umbel", "panicle", "compound"];
+  const leafTypes = [
+    "simple",
+    "palmate",
+    "pinnate",
+    "lobed",
+    "needle",
+    "scale",
+    "lanceolate",
+    "serrate"
+  ];
+  const flowerTypes = [
+    "solitary",
+    "sakura",
+    "ume",
+    "azalea",
+    "raceme",
+    "umbel",
+    "panicle",
+    "compound"
+  ];
   const leafTrait = expressTrait(g, "leafShape") || 0;
   const selectedLeafMorphology = leafTypes[Math.abs(leafTrait) % leafTypes.length];
-  const inflorescenceTrait = expressTrait(g, "inflorescence");
+  const inflorescenceTrait = expressTrait(g, "inflorescence") || 0;
   const selectedFlowerMorphology = flowerTypes[Math.abs(inflorescenceTrait) % flowerTypes.length];
   const flowerRGB = expressTrait(g, "flowerRGB") || [236, 72, 153];
   const basePetalColor = `rgb(${flowerRGB[0]}, ${flowerRGB[1]}, ${flowerRGB[2]})`;
@@ -2469,17 +3009,28 @@ function renderPlant(ctx, state, w, h, devOptions) {
         leafAngle = n.angle;
       }
       ctx.save();
-      const maturity = Math.min(1, (n.age ?? 1) / 5);
+      const progress = n.growthProgress ?? Math.min(1, (n.age ?? 1) / 20);
       ctx.translate(leafX, leafY);
       ctx.rotate(leafAngle);
-      ctx.scale(maturity, maturity);
+      const defaultAlpha = selectedLeafMorphology === "needle" || selectedLeafMorphology === "scale" ? 0.85 : 0.78;
+      let leafAlpha = defaultAlpha;
+      if (state.foliageTransparent) {
+        leafAlpha = 0.22;
+      } else if (state.cursorWorldX !== undefined && state.cursorWorldY !== undefined) {
+        const d = Math.hypot(leafX - state.cursorWorldX, leafY - state.cursorWorldY);
+        if (d < 75) {
+          const proximity = d / 75;
+          leafAlpha = Math.min(defaultAlpha, 0.2 + (defaultAlpha - 0.2) * proximity);
+        }
+      }
+      ctx.globalAlpha = leafAlpha;
       const leafHueOffset = Math.abs(n.id * 17) % 25 - 12;
       const currentHue = (baseHue + leafHueOffset + 360) % 360;
       let effectiveHue = currentHue;
       let sat = state.darkMode ? 50 : 55;
       let lightBase = state.darkMode ? 28 + n.id % 6 : 38 + n.id % 6;
       let lightTip = state.darkMode ? 45 + n.id % 6 : 52 + n.id % 6;
-      const isEvergreen = selectedLeafMorphology === "needle" || state.speciesId === "pinus-thunbergii" || state.speciesId === "bunjingi-pine" || state.speciesId === "kengai-cascade";
+      const isEvergreen = selectedLeafMorphology === "needle" || selectedLeafMorphology === "scale" || state.speciesId === "pinus-thunbergii" || state.speciesId === "bunjingi-pine" || state.speciesId === "kengai-cascade";
       if (state.speciesId === "acer-palmatum") {
         const variant = Math.abs(n.id) % 3;
         effectiveHue = variant === 0 ? 354 : variant === 1 ? 12 : 26;
@@ -2494,7 +3045,7 @@ function renderPlant(ctx, state, w, h, devOptions) {
       }
       const activeBase = `hsl(${effectiveHue}, ${sat}%, ${lightBase}%)`;
       const activeTip = `hsl(${effectiveHue}, ${sat + 8}%, ${lightTip}%)`;
-      drawModularLeaf(ctx, selectedLeafMorphology, 14, activeBase, activeTip);
+      drawModularLeaf(ctx, selectedLeafMorphology, 14, activeBase, activeTip, progress);
       ctx.restore();
     } else if (n.type === "flower") {
       const parentTr = n.parentId !== null ? globalStemTransforms.get(n.parentId) : undefined;
@@ -2511,11 +3062,24 @@ function renderPlant(ctx, state, w, h, devOptions) {
       }
       ctx.save();
       ctx.translate(flowerX, flowerY);
+      const defaultFlowerAlpha = 0.95;
+      let flowerAlpha = defaultFlowerAlpha;
+      if (state.foliageTransparent) {
+        flowerAlpha = 0.24;
+      } else if (state.cursorWorldX !== undefined && state.cursorWorldY !== undefined) {
+        const d = Math.hypot(flowerX - state.cursorWorldX, flowerY - state.cursorWorldY);
+        if (d < 75) {
+          const proximity = d / 75;
+          flowerAlpha = Math.min(defaultFlowerAlpha, 0.22 + (defaultFlowerAlpha - 0.22) * proximity);
+        }
+      }
+      ctx.globalAlpha = flowerAlpha;
+      const progress = n.growthProgress ?? Math.min(1, (n.age ?? 1) / 25);
       const isPolyploid = Math.abs(n.id * 13) % 11 === 0;
-      const flowerScale = isPolyploid ? 1.4 : 1;
+      const flowerScale = isPolyploid ? 1.3 : 1;
       ctx.scale(flowerScale, flowerScale);
       const petalCount = expressTrait(g, "petalCount") || 5;
-      drawModularFlower(ctx, selectedFlowerMorphology, petalCount + (isPolyploid ? 2 : 0), 10, basePetalColor, "#facc15");
+      drawModularFlower(ctx, selectedFlowerMorphology, petalCount + (isPolyploid ? 2 : 0), 10, basePetalColor, "#facc15", progress);
       ctx.restore();
     } else if (n.type === "bud") {
       const parentTr = n.parentId !== null ? globalStemTransforms.get(n.parentId) : undefined;
@@ -2638,16 +3202,18 @@ function renderWaterDroplets(ctx, droplets) {
   ctx.restore();
 }
 function getCopperCanRosePosition(can) {
+  const facingLeft = can.facingLeft !== false;
   const cosT = Math.cos(can.tiltAngle);
   const sinT = Math.sin(can.tiltAngle);
-  const localX = -44;
+  const localX = facingLeft ? -44 : 44;
   const localY = -22;
   const worldX = can.x + (localX * cosT - localY * sinT);
   const worldY = can.y + (localX * sinT + localY * cosT);
+  const baseAngle = facingLeft ? Math.PI * 0.68 : Math.PI * 0.32;
   return {
     x: worldX,
     y: worldY,
-    angle: -Math.PI * 0.62 + can.tiltAngle
+    angle: baseAngle + (facingLeft ? -can.tiltAngle * 0.5 : can.tiltAngle * 0.5)
   };
 }
 function renderCopperWateringCan(ctx, can) {
@@ -2662,6 +3228,10 @@ function renderCopperWateringCan(ctx, can) {
   ctx.ellipse(can.x - 6, shadowY, 30 * shadowScale, 7 * shadowScale, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.translate(can.x, can.y);
+  const facingLeft = can.facingLeft !== false;
+  if (!facingLeft) {
+    ctx.scale(-1, 1);
+  }
   ctx.rotate(can.tiltAngle);
   ctx.strokeStyle = "#a84824";
   ctx.lineWidth = 3.6;
@@ -2780,19 +3350,19 @@ function renderWaterStreams(ctx, streams) {
     const speed = Math.hypot(s.vx, s.vy);
     if (speed < 0.1)
       continue;
-    const tailLen = Math.min(s.len, speed * 0.12);
+    const tailLen = Math.min(s.len, Math.max(7, speed * 0.22));
     const tailX = s.x - s.vx / speed * tailLen;
     const tailY = s.y - s.vy / speed * tailLen;
-    ctx.strokeStyle = `rgba(186, 230, 253, ${s.alpha * 0.78})`;
-    ctx.lineWidth = s.thickness || 1.2;
+    ctx.strokeStyle = `rgba(186, 230, 253, ${s.alpha * 0.72})`;
+    ctx.lineWidth = s.thickness || 0.95;
     ctx.beginPath();
     ctx.moveTo(tailX, tailY);
     ctx.lineTo(s.x, s.y);
     ctx.stroke();
-    ctx.strokeStyle = `rgba(255, 255, 255, ${s.alpha * 0.95})`;
-    ctx.lineWidth = Math.max(0.6, (s.thickness || 1.2) * 0.45);
+    ctx.strokeStyle = `rgba(255, 255, 255, ${s.alpha * 0.88})`;
+    ctx.lineWidth = Math.max(0.45, (s.thickness || 0.95) * 0.38);
     ctx.beginPath();
-    ctx.moveTo(tailX + (s.x - tailX) * 0.35, tailY + (s.y - tailY) * 0.35);
+    ctx.moveTo(tailX + (s.x - tailX) * 0.45, tailY + (s.y - tailY) * 0.45);
     ctx.lineTo(s.x, s.y);
     ctx.stroke();
   }
@@ -3616,20 +4186,24 @@ function pluckLeavesAlongSwipe(state, p1, p2, stemTransforms, threshold = 18) {
 function getNodeThickness(state, nodeId) {
   const node = state.nodes.find((n) => n.id === nodeId);
   if (!node)
-    return 1.5;
-  let descendantCount = 0;
+    return 1.2;
+  let descendantStems = 0;
   const stack = [nodeId];
   while (stack.length > 0) {
     const cur = stack.pop();
     for (const n of state.nodes) {
       if (n.parentId === cur) {
-        descendantCount++;
+        if (n.type === "stem" || n.type === "meristem") {
+          descendantStems++;
+        }
         stack.push(n.id);
       }
     }
   }
-  const wood = Math.min(1, (node.age ?? 0) / 80);
-  return Math.max(1.2, Math.sqrt(descendantCount + 1) * 1.35 + wood * 1.8);
+  const wood = Math.min(1, (node.age ?? 0) / 90);
+  const baseT = 1.15 + Math.pow(descendantStems, 0.42) * 0.75 + wood * 0.35;
+  const flare = node.depth === 0 ? 3.8 : node.depth === 1 ? 2 : 0;
+  return Math.max(1.1, baseT + flare);
 }
 function bendStemWithWire(state, targetNodeId, deltaBend, stemTransforms) {
   const targetNode = state.nodes.find((n) => n.id === targetNodeId);
@@ -3752,6 +4326,7 @@ function bendStemWithWire(state, targetNodeId, deltaBend, stemTransforms) {
     return {
       ...n,
       hasWire: true,
+      wireAge: n.hasWire ? n.wireAge ?? 0 : 0,
       wireCurvature: newBend,
       wireAngleOffset: newBend,
       barkFracture
@@ -3772,6 +4347,52 @@ function bendStemWithWire(state, targetNodeId, deltaBend, stemTransforms) {
       thickness
     }
   });
+}
+function removeWire(state, targetNodeId) {
+  const targetNode = state.nodes.find((n) => n.id === targetNodeId);
+  if (!targetNode || !targetNode.hasWire) {
+    return {
+      state,
+      info: {
+        removed: false,
+        springback: 0,
+        lignification: 1,
+        nodeId: targetNodeId,
+        hadWireBite: false
+      }
+    };
+  }
+  const wireAge = targetNode.wireAge ?? 0;
+  const lignification = Math.min(1, wireAge / 25);
+  const springback = 1 - lignification;
+  const currentBend = targetNode.wireCurvature ?? targetNode.wireAngleOffset ?? 0;
+  const remainingBend = currentBend * (1 - springback);
+  const hadWireBite = Boolean(targetNode.hasWireBite);
+  const updatedNodes = state.nodes.map((n) => {
+    if (n.id !== targetNodeId)
+      return n;
+    return {
+      ...n,
+      hasWire: false,
+      wireAge: 0,
+      wireCurvature: remainingBend,
+      wireAngleOffset: remainingBend,
+      barkFracture: Math.max(0, (n.barkFracture ?? 0) * 0.5)
+    };
+  });
+  return {
+    state: {
+      ...state,
+      nodes: updatedNodes
+    },
+    info: {
+      removed: true,
+      springback,
+      lignification,
+      nodeId: targetNodeId,
+      hadWireBite
+    }
+  };
 }
 function carveBranchToJin(state, targetNodeId) {
   const targetNode = state.nodes.find((n) => n.id === targetNodeId);
@@ -4027,9 +4648,50 @@ function extractGeometricMetrics(state) {
       lowestStemY = n.y;
     }
   }
+  const childrenByParent = new Map;
+  for (const n of nodes) {
+    if (n.isCut)
+      continue;
+    if (n.parentId !== null) {
+      let list = childrenByParent.get(n.parentId);
+      if (!list) {
+        list = [];
+        childrenByParent.set(n.parentId, list);
+      }
+      list.push(n);
+    }
+  }
+  const thickCache = new Map;
+  function calcThick(n) {
+    if (thickCache.has(n.id))
+      return thickCache.get(n.id);
+    const kids = childrenByParent.get(n.id) ?? [];
+    const childStems = kids.filter((c) => !c.isCut && (c.type === "stem" || c.type === "meristem"));
+    let t;
+    if (childStems.length === 0) {
+      const wood = Math.min(1, (n.age || 0) / 90);
+      t = (n.type === "meristem" ? 1.05 : 1.25) + wood * 0.35;
+    } else if (childStems.length === 1) {
+      t = calcThick(childStems[0]) + 0.16;
+    } else {
+      let sumP = 0;
+      for (const c of childStems) {
+        sumP += Math.pow(calcThick(c), 2.4);
+      }
+      t = Math.pow(sumP, 1 / 2.4) + 0.22;
+    }
+    if (n.depth === 0)
+      t += 3.8;
+    else if (n.depth === 1)
+      t += 2;
+    thickCache.set(n.id, t);
+    return t;
+  }
   const baseNode = trunkPath.find((n) => n.type === "stem") || (trunkPath.length > 0 ? trunkPath[0] : root);
-  const baseThickness = Math.max(1.5, Math.min(25, (baseNode.age || 1) * 0.4 + 3));
-  const slendernessRatio = height / baseThickness;
+  const baseThickness = baseNode.id !== 0 ? calcThick(baseNode) : 3;
+  const apexThickness = apexNode.id !== 0 ? calcThick(apexNode) : 1.5;
+  const trunkTaper = Number((baseThickness / Math.max(0.5, apexThickness)).toFixed(2));
+  const slendernessRatio = Number((height / Math.max(1, baseThickness)).toFixed(1));
   const topQuarterY = minY + 0.25 * height;
   let topLeaves = 0;
   let leftFoliageMass = 0;
@@ -4097,7 +4759,7 @@ function extractGeometricMetrics(state) {
       break;
     }
   }
-  let outerCurveAdherence = 0.85;
+  let outerCurveAdherence = 1;
   if (trunkPath.length >= 3) {
     let evaluatedBranches = 0;
     let validBranches = 0;
@@ -4106,6 +4768,8 @@ function extractGeometricMetrics(state) {
       const pCurr = trunkPath[i];
       const pNext = trunkPath[i + 1];
       const bendX = (pPrev.x + pNext.x) / 2 - pCurr.x;
+      if (Math.abs(bendX) < 1.5)
+        continue;
       const childBranches = stems.filter((s) => s.parentId === pCurr.id && !trunkNodeIds.has(s.id));
       for (const cb of childBranches) {
         evaluatedBranches++;
@@ -4120,7 +4784,7 @@ function extractGeometricMetrics(state) {
     }
   }
   const faults = [];
-  const branchHeights = stems.filter((s) => s.parentId !== null && trunkNodeIds.has(s.parentId)).map((s) => s.y);
+  const branchHeights = stems.filter((s) => s.parentId !== null && trunkNodeIds.has(s.parentId) && !trunkNodeIds.has(s.id)).map((s) => s.y);
   branchHeights.sort((a, b) => a - b);
   for (let i = 0;i < branchHeights.length - 2; i++) {
     if (Math.abs(branchHeights[i + 2] - branchHeights[i]) < 0.04 * height) {
@@ -4136,6 +4800,44 @@ function extractGeometricMetrics(state) {
   }
   if (outerCurveAdherence < 0.4) {
     faults.push("Uchikomi (Äste in der Innenkurve)");
+  }
+  const hasWireBite = nodes.some((n) => !n.isCut && n.hasWireBite);
+  if (hasWireBite) {
+    faults.push("Kikomi (Drahtnarbung: Draht ist ins lebende Holz eingewachsen)");
+  }
+  if (trunkTaper < 0.95 && stems.length >= 4) {
+    faults.push("Gyaku-mikiki (Umgekehrte Verjüngung: Stamm wird nach oben dicker)");
+  }
+  const primaryLateralHeights = [];
+  for (const n of stems) {
+    if (n.parentId !== null && trunkNodeIds.has(n.parentId) && !trunkNodeIds.has(n.id)) {
+      primaryLateralHeights.push(n.y);
+    }
+  }
+  primaryLateralHeights.sort((a, b) => a - b);
+  let branchTiers = 0;
+  let lastTierY = -999999;
+  for (const by of primaryLateralHeights) {
+    if (Math.abs(by - lastTierY) > 0.07 * height) {
+      branchTiers++;
+      lastTierY = by;
+    }
+  }
+  let matureFoliageCount = 0;
+  for (const l of leaves) {
+    if ((l.growthProgress ?? 1) >= 0.6) {
+      matureFoliageCount++;
+    }
+  }
+  let maturityStage;
+  if (stems.length < 4) {
+    maturityStage = "seedling";
+  } else if (stems.length < 7) {
+    maturityStage = "young_stock";
+  } else if (stems.length < 12) {
+    maturityStage = "developed";
+  } else {
+    maturityStage = "masterwork";
   }
   return {
     totalNodes: nodes.length,
@@ -4153,6 +4855,11 @@ function extractGeometricMetrics(state) {
     sinuosity: Number(sinuosity.toFixed(3)),
     lowestStemY: Number((lowestStemY - rootY).toFixed(1)),
     baseCaliper: Number(baseThickness.toFixed(1)),
+    apexCaliper: Number(apexThickness.toFixed(1)),
+    trunkTaper,
+    branchTiers,
+    matureFoliageCount,
+    maturityStage,
     slendernessRatio: Number(slendernessRatio.toFixed(1)),
     crownFoliageRatio: Number(crownFoliageRatio.toFixed(2)),
     bareTrunkFraction: Number(bareTrunkFraction.toFixed(2)),
@@ -4186,15 +4893,18 @@ function evaluateBonsaiSchools(state) {
     }
   }
   let tier = "none";
-  if (highestScore >= 92)
+  if (highestScore >= 88 && m.stemCount >= 10 && m.trunkTaper >= 1.45 && m.faultCount === 0 && m.branchTiers >= 3) {
     tier = "kokufu";
-  else if (highestScore >= 82)
+  } else if (highestScore >= 80 && m.stemCount >= 8 && m.trunkTaper >= 1.3 && m.faultCount <= 1 && m.branchTiers >= 2) {
     tier = "master";
-  else if (highestScore >= 68)
+  } else if (highestScore >= 68 && m.stemCount >= 6) {
     tier = "adept";
-  else if (highestScore >= 50)
+  } else if (highestScore >= 48 && m.stemCount >= 4) {
     tier = "novice";
-  const faultPenalty = m.faultCount * 6;
+  } else {
+    tier = "none";
+  }
+  const faultPenalty = m.faultCount * 8;
   const overallAestheticScore = Math.max(10, Math.min(100, Math.round(highestScore - faultPenalty)));
   const recommendations = [];
   if (m.faults.length > 0) {
@@ -4214,6 +4924,44 @@ function evaluateBonsaiSchools(state) {
     recommendations
   };
 }
+function applyMaturityAndTaper(rawScore, m, strengths, feedback, isBunjingi = false) {
+  let score = rawScore;
+  if (m.trunkTaper >= 1.55) {
+    strengths.push("Exzellente Stammverjüngung (Tachiagari) von der Wurzelbasis zur Krone.");
+  } else if (m.trunkTaper >= 1.3) {
+    strengths.push("Gute, harmonische Stammverjüngung.");
+  } else if (m.trunkTaper < 1.15 && m.stemCount >= 4) {
+    score -= 18;
+    feedback.push("Geringe Stammverjüngung: Stamm wirkt zylindrisch wie ein Stab.");
+  } else if (m.trunkTaper < 1 && m.stemCount >= 4) {
+    score -= 28;
+    feedback.push("Umgekehrte Verjüngung (Gyaku-mikiki) stört die Tiefenwirkung gravierend.");
+  }
+  for (const f of m.faults) {
+    if (f.includes("Kuruma-eda"))
+      score -= 18;
+    else if (f.includes("Kannon-eda"))
+      score -= 14;
+    else if (f.includes("Uchikomi"))
+      score -= 16;
+    else if (f.includes("Kikomi"))
+      score -= 12;
+    else if (f.includes("Gyaku-mikiki"))
+      score -= 20;
+  }
+  if (m.stemCount < 4) {
+    if (score > 35) {
+      score = Math.min(score, 35);
+      feedback.push("Ungeformter Keimling: Noch keine bewertbare Bonsai-Struktur (mindestens 4-7 verholzte Astsegmente erforderlich).");
+    }
+  } else if (m.stemCount < (isBunjingi ? 6 : 7)) {
+    if (score > 58) {
+      score = Math.min(score, 58);
+      feedback.push("Junger Rohling: Primäräste noch im Aufbau. Für Meistergrade sind Sekundärverzweigung und Astetagen nötig.");
+    }
+  }
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
 function scoreChokkan(m) {
   let score = 100;
   const strengths = [];
@@ -4224,17 +4972,17 @@ function scoreChokkan(m) {
     score -= 10;
     strengths.push("Gute aufrechte Haltung.");
   } else {
-    score -= Math.min(60, Math.round((m.apexOffsetRatio - 0.07) * 200));
+    score -= Math.min(60, Math.round((m.apexOffsetRatio - 0.07) * 220));
     feedback.push("Krone neigt sich zu stark zur Seite für den Chokkan-Stil.");
   }
-  if (m.sinuosity <= 1.04) {
+  if (m.sinuosity <= 1.03) {
     strengths.push("Gerader, würdevoller Stammverlauf.");
   } else {
-    score -= Math.min(40, Math.round((m.sinuosity - 1.04) * 120));
+    score -= Math.min(45, Math.round((m.sinuosity - 1.03) * 150));
     feedback.push("Stamm weist zu viele Biegungen für Chokkan auf; Drahtung begradigen.");
   }
   if (m.lowestStemY > 2) {
-    score -= 35;
+    score -= 40;
     feedback.push("Chokkan darf keine herabhängenden Äste unter Topfrand aufweisen.");
   }
   if (m.slendernessRatio >= 5 && m.slendernessRatio <= 12) {
@@ -4243,11 +4991,19 @@ function scoreChokkan(m) {
     score -= Math.min(45, Math.round((m.slendernessRatio - 14) * 6));
     feedback.push("Stamm ist zu schlank für Chokkan (eher Bunjingi/Literatenstil).");
   }
-  if (m.bareTrunkFraction >= 0.7) {
+  if (m.bareTrunkFraction >= 0.65) {
     score -= 35;
     feedback.push("Chokkan benötigt eine harmonische Astverteilung im unteren und mittleren Bereich.");
+  } else if (m.bareTrunkFraction >= 0.2 && m.bareTrunkFraction <= 0.45) {
+    strengths.push("Harmonischer Freiraum des unteren Stammabschnitts.");
   }
-  score = Math.max(0, Math.min(100, score));
+  if (m.branchTiers >= 3) {
+    strengths.push("Vorbildliche Astetagen (Sanbō-zashi: linke, rechte und rückwärtige Raumäste).");
+  } else if (m.branchTiers < 2 && m.stemCount >= 7) {
+    score -= 20;
+    feedback.push("Chokkan erfordert eine klare vertikale Etagenstaffelung der Äste.");
+  }
+  score = applyMaturityAndTaper(score, m, strengths, feedback);
   return {
     styleId: "chokkan",
     style: BONSAI_STYLES.chokkan,
@@ -4263,29 +5019,32 @@ function scoreMoyogi(m) {
   const feedback = [];
   if (m.apexOffsetRatio <= 0.08) {
     strengths.push("Krone kehrt meisterhaft über das Nebari zurück.");
-  } else if (m.apexOffsetRatio <= 0.15) {
+  } else if (m.apexOffsetRatio <= 0.14) {
     score -= 12;
     strengths.push("Gute Kronenbalance über der Basis.");
   } else {
-    score -= Math.min(45, Math.round((m.apexOffsetRatio - 0.15) * 150));
+    score -= Math.min(50, Math.round((m.apexOffsetRatio - 0.14) * 180));
     feedback.push("Die Krone sollte sich wieder über die Wurzelbasis zurückbeugen.");
   }
-  if (m.sinuosity >= 1.1) {
+  if (m.sinuosity >= 1.08) {
     strengths.push("Lebendige, rhythmische Stammlinie mit harmonischen Kurven.");
-  } else if (m.sinuosity >= 1.06) {
+  } else if (m.sinuosity >= 1.05) {
     score -= 15;
     feedback.push("Etwas mehr Schwung im Stammverlauf nötig.");
   } else {
-    score -= 40;
+    score -= 45;
     feedback.push("Stamm ist zu gerade für Moyogi (Frei Aufrecht).");
   }
   if (m.outerCurveAdherence >= 0.7) {
-    strengths.push("Äste entspringen vorbildlich an den Außenradien der Kurven.");
+    strengths.push("Äste entspringen vorbildlich an den Außenradien der Kurven (Kyokusho).");
   } else {
-    score -= Math.min(25, Math.round((0.7 - m.outerCurveAdherence) * 45));
-    feedback.push("Äste sollten an den Außenseiten der Biegungen sitzen, nicht in den Falten.");
+    score -= Math.min(30, Math.round((0.7 - m.outerCurveAdherence) * 50));
+    feedback.push("Äste sollten an den Außenseiten der Biegungen sitzen, nicht in den Innenfalten.");
   }
-  score = Math.max(0, Math.min(100, score));
+  if (m.branchTiers >= 2) {
+    strengths.push("Gute räumliche Tiefengliederung der Astpartien.");
+  }
+  score = applyMaturityAndTaper(score, m, strengths, feedback);
   return {
     styleId: "moyogi",
     style: BONSAI_STYLES.moyogi,
@@ -4312,10 +5071,11 @@ function scoreShakan(m) {
     score -= 55;
     feedback.push("Zu geringe Stammneigung für den Schrägstamm-Stil.");
   }
-  if (m.apexOffsetRatio >= 0.25) {
+  if (m.apexOffsetRatio >= 0.22) {
     strengths.push("Ausgeprägte optische Dynamik durch versetzten Scheitelpunkt.");
   } else {
-    score -= 30;
+    score -= 35;
+    feedback.push("Apex muss deutlich zur Neigungsseite versetzt sein.");
   }
   if (m.lowestStemY > 20) {
     score -= 60;
@@ -4324,7 +5084,7 @@ function scoreShakan(m) {
     score -= 30;
     feedback.push("Herabhängende Äste deuten eher auf Halbkaskade hin.");
   }
-  score = Math.max(0, Math.min(100, score));
+  score = applyMaturityAndTaper(score, m, strengths, feedback);
   return {
     styleId: "shakan",
     style: BONSAI_STYLES.shakan,
@@ -4340,20 +5100,25 @@ function scoreKengai(m) {
   const feedback = [];
   if (m.lowestStemY > 38) {
     strengths.push(`Tief herabstürzende Kaskade (fällt ${m.lowestStemY.toFixed(0)}px unter Topfrand).`);
-    if (m.lowestStemY > 55) {
-      strengths.push("Ausdrucksstarker, dramatischer Felsabsturz.");
+    if (m.lowestStemY > 50) {
+      strengths.push("Ausdrucksstarker, dramatischer Felsabsturz tief unter das Gefäß.");
     }
-  } else if (m.lowestStemY > 20) {
-    score -= 35;
-    feedback.push("Astspitze taucht noch nicht tief genug unter den Topfboden (>38px) für Vollkaskade.");
   } else if (m.lowestStemY > 0) {
-    score -= 55;
-    feedback.push("Erfüllt aktuell nur die Kriterien für eine Halbkaskade (Han-Kengai).");
+    score -= 65;
+    feedback.push("Astspitze taucht nicht unter den Topfboden (>38px); erfüllt nur Halbkaskaden-Kriterien (Han-Kengai).");
   } else {
     score = 0;
     feedback.push("Keine herabhängenden Kaskadenäste vorhanden.");
   }
-  score = Math.max(0, Math.min(100, score));
+  if (score > 0) {
+    if (m.apexY < m.rootY) {
+      strengths.push("Erhabene Kopfpartie über dem Topfrand balanciert den tiefen Astfall.");
+    } else {
+      score -= 20;
+      feedback.push("Eine Kengai-Vollkaskade benötigt eine lebende Krone oberhalb des Topfrands.");
+    }
+    score = applyMaturityAndTaper(score, m, strengths, feedback);
+  }
   return {
     styleId: "kengai",
     style: BONSAI_STYLES.kengai,
@@ -4370,7 +5135,7 @@ function scoreHanKengai(m) {
   if (m.lowestStemY > 4 && m.lowestStemY <= 38) {
     strengths.push(`Perfekte Halbkaskaden-Tiefe (${m.lowestStemY.toFixed(0)}px unter Topfrand, über Topfboden).`);
   } else if (m.lowestStemY > 38) {
-    score -= 40;
+    score -= 45;
     feedback.push("Ast fällt bereits zu tief unter den Topfboden; eher Vollkaskade (Kengai).");
   } else if (m.lowestStemY > 0) {
     score -= 20;
@@ -4379,10 +5144,15 @@ function scoreHanKengai(m) {
     score = 0;
     feedback.push("Kein Ast ragt unter den Topfrand.");
   }
-  if (m.width > m.height * 0.8) {
-    strengths.push("Weit ausgreifender, horizontaler Uferast.");
+  if (score > 0) {
+    if (m.width >= m.height * 0.75) {
+      strengths.push("Weit ausgreifender, horizontaler Uferast.");
+    } else {
+      score -= 20;
+      feedback.push("Halbkaskade erfordert eine stärkere horizontale Ausladung.");
+    }
+    score = applyMaturityAndTaper(score, m, strengths, feedback);
   }
-  score = Math.max(0, Math.min(100, score));
   return {
     styleId: "han-kengai",
     style: BONSAI_STYLES["han-kengai"],
@@ -4396,25 +5166,32 @@ function scoreBunjingi(m) {
   let score = 100;
   const strengths = [];
   const feedback = [];
-  if (m.slendernessRatio >= 16) {
+  if (m.slendernessRatio >= 15) {
     strengths.push(`Hervorragende literarische Eleganz (Schlankheit ${m.slendernessRatio.toFixed(0)}:1).`);
   } else if (m.slendernessRatio >= 12) {
     score -= 15;
     strengths.push("Schlanke Silhouette.");
   } else {
-    score -= Math.min(50, Math.round((14 - m.slendernessRatio) * 6));
+    score -= Math.min(50, Math.round((15 - m.slendernessRatio) * 7));
     feedback.push("Stamm ist zu dick bzw. zu gedrungen für den Bunjingi-Stil (Literatenstil).");
   }
   if (m.bareTrunkFraction >= 0.65) {
     strengths.push("Erhabener, kahler Unterstamm voller Freiraum (Ma).");
   } else {
-    score -= Math.min(45, Math.round((0.65 - m.bareTrunkFraction) * 80));
+    score -= Math.min(45, Math.round((0.65 - m.bareTrunkFraction) * 85));
     feedback.push("Untere Äste entfernen, um den kargen, freien Stammcharakter zu betonen.");
   }
-  if (m.crownFoliageRatio >= 0.7) {
+  if (m.crownFoliageRatio >= 0.65) {
     strengths.push("Laubmasse sparsam und dicht im Kronenbereich konzentriert.");
+  } else {
+    score -= 25;
+    feedback.push("Blattwerk sollte auf das obere Kronenviertel konzentriert sein.");
   }
-  score = Math.max(0, Math.min(100, score));
+  if (m.branchTiers > 3) {
+    score -= 20;
+    feedback.push("Zu viele Astetagen widersprechen der asketischen Schlichtheit des Bunjingi.");
+  }
+  score = applyMaturityAndTaper(score, m, strengths, feedback, true);
   return {
     styleId: "bunjingi",
     style: BONSAI_STYLES.bunjingi,
@@ -4428,18 +5205,18 @@ function scoreFukinagashi(m) {
   let score = 100;
   const strengths = [];
   const feedback = [];
-  if (m.windwardRatio >= 0.8) {
+  if (m.windwardRatio >= 0.78) {
     strengths.push(`Starke Windflucht: ${(m.windwardRatio * 100).toFixed(0)}% der Masse strömen nach ${m.windFlowDir === "left" ? "Links" : "Rechts"}.`);
   } else if (m.windwardRatio >= 0.7) {
     score -= 20;
     strengths.push("Spürbare Windströmung.");
   } else {
-    score -= Math.min(60, Math.round((0.75 - m.windwardRatio) * 150));
+    score -= Math.min(60, Math.round((0.78 - m.windwardRatio) * 160));
     feedback.push("Äste müssen einseitig in Lee-Richtung gestrafft und geformt werden.");
   }
   const absLean = Math.abs(m.leanAngleDeg);
-  if (absLean < 12 && m.apexOffsetRatio < 0.18) {
-    score -= 45;
+  if (absLean < 15 && m.apexOffsetRatio < 0.2) {
+    score -= 40;
     feedback.push("Fukinagashi erfordert eine spürbare Windneigung von Stamm und Krone.");
   } else if (absLean >= 18) {
     strengths.push(`Stamm neigt sich authentisch mit dem Wind (${absLean.toFixed(0)}°).`);
@@ -4448,7 +5225,7 @@ function scoreFukinagashi(m) {
     score -= 35;
     feedback.push("Hoher kahler Stamm ohne Windfahnen-Äste gehört zum Bunjingi-Stil.");
   }
-  score = Math.max(0, Math.min(100, score));
+  score = applyMaturityAndTaper(score, m, strengths, feedback);
   return {
     styleId: "fukinagashi",
     style: BONSAI_STYLES.fukinagashi,
@@ -4462,7 +5239,7 @@ function scoreJinShari(m) {
   let score = 100;
   const strengths = [];
   const feedback = [];
-  if (m.deadwoodRatio >= 0.2 && m.deadwoodRatio <= 0.6) {
+  if (m.deadwoodRatio >= 0.18 && m.deadwoodRatio <= 0.6) {
     strengths.push(`Harmonischer Totholzanteil von ${(m.deadwoodRatio * 100).toFixed(0)}% (Wabi-Sabi Ästhetik).`);
   } else if (m.deadwoodRatio > 0.08) {
     score -= 25;
@@ -4471,13 +5248,21 @@ function scoreJinShari(m) {
     score = 0;
     feedback.push("Noch kein Totholz geschnitzt (Jin-Werkzeug nutzen).");
   }
-  if (m.hasContinuousLifeline) {
-    strengths.push("Lebensader (Mizusui) unversehrt: Alle Blätter sind vital versorgt.");
-  } else {
-    score -= 40;
-    feedback.push("Warnung: Eine Totholzpartie hat die Lebensader zu lebenden Trieben gekappt!");
+  if (score > 0) {
+    if (m.hasContinuousLifeline) {
+      strengths.push("Lebensader (Mizusui) unversehrt: Alle Blätter sind vital versorgt.");
+    } else {
+      score -= 45;
+      feedback.push("Warnung: Eine Totholzpartie hat die Lebensader zu lebenden Trieben gekappt!");
+    }
+    if (m.leafCount >= 3) {
+      strengths.push("Vitaler Kontrast zwischen gebleichtem Totholz und lebendiger Nadel-/Blattmasse.");
+    } else if (m.leafCount === 0) {
+      score -= 45;
+      feedback.push("Der Baum ist kahl abgestorben — Wabi-Sabi benötigt vitales lebendes Grün.");
+    }
+    score = applyMaturityAndTaper(score, m, strengths, feedback);
   }
-  score = Math.max(0, Math.min(100, score));
   return {
     styleId: "jin-shari",
     style: BONSAI_STYLES["jin-shari"],
@@ -4506,12 +5291,8 @@ var TOKONOMA_REWARD_CATALOG = [
       secondaryColor: "#52525b"
     },
     description: "Gestaffelte Bergkämme, die im Morgennebel verblassen. Bringt zeitlose Tiefe und Ruhe in den Tokonoma-Raum.",
-    unlockCondition: "Kultiviere einen Baum im Shakan-Stil (Geneigter Stamm) oder beginne deine Bonsai-Reise.",
-    checkUnlocked: (state, report) => {
-      if (!report)
-        return true;
-      return report.scores.shakan.score >= 50 || (state.unlockedRewards?.includes("kakejiku_mountain_sansui") ?? true);
-    }
+    unlockCondition: "Starter-Hängerolle: Der zeitlose Begleiter für jeden neu gepflanzten Bonsai.",
+    checkUnlocked: () => true
   },
   {
     id: "kakejiku_zen_enso",
@@ -4529,14 +5310,13 @@ var TOKONOMA_REWARD_CATALOG = [
       secondaryColor: "#18181b"
     },
     description: "Ein in einem einzigen Pinselstrich vollendeter Kreis des Meisters. Symbolisiert Leerheit, Erleuchtung und den Kreislauf allen Seins.",
-    unlockCondition: "Schnitze mindestens 2 Totholz-Partien (Jin & Shari) oder erreiche Jin-Shari Score ≥ 60.",
+    unlockCondition: "Meistere den Jin & Shari Stil mit Score ≥ 72, schnitze mindestens 3 Totholzpartien bei intakter Lebensader und mindestens 7 Astsegmenten.",
     checkUnlocked: (state, report) => {
-      const jinNodes = state.nodes.filter((n) => n.isJin);
-      if (jinNodes.length >= 2)
-        return true;
-      if (report && report.scores["jin-shari"].score >= 60)
-        return true;
-      return false;
+      if (!report)
+        return false;
+      const stems = state.nodes.filter((n) => !n.isCut && (n.type === "stem" || n.type === "meristem"));
+      const jinCount = state.nodes.filter((n) => (n.isJin || n.isBroken) && !n.isCut).length;
+      return report.scores["jin-shari"].score >= 72 && jinCount >= 3 && report.metrics.hasContinuousLifeline && stems.length >= 7;
     }
   },
   {
@@ -4555,9 +5335,11 @@ var TOKONOMA_REWARD_CATALOG = [
       secondaryColor: "#fef08a"
     },
     description: "Ein leuchtender Vollmond aus Blattgold vor tiefblauem Nachthimmel. Weckt die heitere Stille des Tsukimi-Festes.",
-    unlockCondition: "Erreiche die Schule Fukinagashi (Windgepeitscht) mit Score ≥ 65.",
+    unlockCondition: "Erreiche die Schule Fukinagashi (Windgepeitscht) mit Score ≥ 78, mindestens 7 Astsegmenten und über 78% Windflucht der Krone.",
     checkUnlocked: (_state, report) => {
-      return Boolean(report && report.scores.fukinagashi.score >= 65);
+      if (!report)
+        return false;
+      return report.scores.fukinagashi.score >= 78 && report.metrics.windwardRatio >= 0.78 && report.metrics.stemCount >= 7 && (Math.abs(report.metrics.leanAngleDeg) >= 15 || report.metrics.apexOffsetRatio >= 0.2);
     }
   },
   {
@@ -4576,9 +5358,11 @@ var TOKONOMA_REWARD_CATALOG = [
       secondaryColor: "#b45309"
     },
     description: "Handgegossene patinierte Bronze eines Anglers mit zarter Bambusrute. Beschwört die Einsamkeit eines stillen Gebirgsflusses herauf.",
-    unlockCondition: "Erreiche den Han-Kengai (Halbkaskade) Stil mit Score ≥ 65.",
+    unlockCondition: "Meistere die Halbkaskade (Han-Kengai) mit Score ≥ 74, mindestens 6 Astsegmenten und weitausladender Krone (Breite ≥ 80% der Höhe).",
     checkUnlocked: (_state, report) => {
-      return Boolean(report && report.scores["han-kengai"].score >= 65);
+      if (!report)
+        return false;
+      return report.scores["han-kengai"].score >= 74 && report.metrics.stemCount >= 6 && report.metrics.width >= report.metrics.height * 0.8;
     }
   },
   {
@@ -4597,11 +5381,14 @@ var TOKONOMA_REWARD_CATALOG = [
       secondaryColor: "#dc2626"
     },
     description: "Patinierter Mandschurenkranich aus Bronze; Symbol für Langlebigkeit, Treue und anmutige Erhabenheit.",
-    unlockCondition: "Meisterklasse: Erziele einen Chokkan- oder Moyogi-Score von ≥ 85 Punkten.",
+    unlockCondition: "Höchste Kokufu-ten Ehrung: Chokkan oder Moyogi mit Score ≥ 88, mindestens 10 Astsegmenten, Stammverjüngung ≥ 1.5 und 0 Fehlerästen.",
     checkUnlocked: (_state, report) => {
       if (!report)
         return false;
-      return report.scores.chokkan.score >= 85 || report.scores.moyogi.score >= 85;
+      const chokkanScore = report.scores.chokkan.score;
+      const moyogiScore = report.scores.moyogi.score;
+      const bestScore = Math.max(chokkanScore, moyogiScore);
+      return bestScore >= 88 && report.metrics.stemCount >= 10 && report.metrics.trunkTaper >= 1.5 && report.metrics.faultCount === 0;
     }
   },
   {
@@ -4623,9 +5410,11 @@ var TOKONOMA_REWARD_CATALOG = [
       particleType: "smoke"
     },
     description: "Blassgrünes Seladon-Räuchergefäß auf drei Füßen. Sendet einen sanft aufsteigenden Faden aus Agarholz-Rauch aus.",
-    unlockCondition: "Erziele in einer beliebigen klassischen Schule einen Reifegrad von Adept (Score ≥ 70).",
+    unlockCondition: "Erziele in einer klassischen Schule den Meister-Grad (Score ≥ 82), mindestens 8 Astsegmente und makellose Astarchitektur ohne Fehleräste (0 Imi-eda).",
     checkUnlocked: (_state, report) => {
-      return Boolean(report && report.dominantScore >= 70);
+      if (!report)
+        return false;
+      return report.dominantScore >= 82 && report.metrics.stemCount >= 8 && report.metrics.faultCount === 0;
     }
   },
   {
@@ -4644,9 +5433,11 @@ var TOKONOMA_REWARD_CATALOG = [
       secondaryColor: "#78350f"
     },
     description: "Vom Flusswasser polierter Basaltstein des Kamo-Flusses auf passgenauem Palisander-Daiza. Stellt eine ferne Gebirgskette dar.",
-    unlockCondition: "Kultiviere einen literarischen Bunjingi-Baum mit Score ≥ 65.",
+    unlockCondition: "Forme einen reifen Literatenbonsai (Bunjingi) mit Score ≥ 76, Schlankheit ≥ 15:1, mindestens 6 Astsegmenten und kargem Unterstamm (≥ 65% kahl).",
     checkUnlocked: (_state, report) => {
-      return Boolean(report && report.scores.bunjingi.score >= 65);
+      if (!report)
+        return false;
+      return report.scores.bunjingi.score >= 76 && report.metrics.slendernessRatio >= 15 && report.metrics.bareTrunkFraction >= 0.65 && report.metrics.stemCount >= 6;
     }
   },
   {
@@ -4666,9 +5457,11 @@ var TOKONOMA_REWARD_CATALOG = [
       accentColor: "#78350f"
     },
     description: "Seltener Furuya-Stein mit senkrechter schneeweißer Quarzader, die wie ein tosender Wasserfall über schwarzen Fels stürzt.",
-    unlockCondition: "Kultiviere eine vollendete Vollkaskade (Kengai) mit Score ≥ 65.",
+    unlockCondition: "Vollende eine dramatische Kengai-Vollkaskade mit Score ≥ 80, mindestens 8 Astsegmenten und Kaskadenfall > 45px unter den Topfrand.",
     checkUnlocked: (_state, report) => {
-      return Boolean(report && report.scores.kengai.score >= 65);
+      if (!report)
+        return false;
+      return report.scores.kengai.score >= 80 && report.metrics.lowestStemY > 45 && report.metrics.stemCount >= 8 && report.metrics.apexY < report.metrics.rootY;
     }
   },
   {
@@ -4688,7 +5481,7 @@ var TOKONOMA_REWARD_CATALOG = [
       accentColor: "#78350f"
     },
     description: "Mooskugel auf geschwärztem Zedernholzbrettchen. Verströmt feuchte, erdige Frische im Raum.",
-    unlockCondition: "Starter-Begleitpflanze oder Pflege mit Moospolstern.",
+    unlockCondition: "Starter-Begleitpflanze: Traditionelle Kokedama-Mooskugel für ein harmonisches Tokonoma-Arrangement.",
     checkUnlocked: () => true
   },
   {
@@ -4708,10 +5501,17 @@ var TOKONOMA_REWARD_CATALOG = [
       accentColor: "#52525b"
     },
     description: "Zarte Frauenhaarfarn-Wedel vereint mit violetten Alpenveilchen in einer schlichten Schale aus Nanban-Ton.",
-    unlockCondition: "Bringe deinen Bonsai zur Blütezeit (mindestens 1 Blüte am Baum).",
+    unlockCondition: "Bringe deinen Bonsai im Frühling zur vollen Blüte (mindestens 3 reife Blüten im Frühlingszyklus, Baumalter ≥ 35).",
     checkUnlocked: (state) => {
-      const flowers = state.nodes.filter((n) => n.type === "flower" && !n.isCut);
-      return flowers.length >= 1;
+      if ((state.step || 0) < 35)
+        return false;
+      const cycle = state.cycleLength || 250;
+      const seasonStep = state.step % cycle;
+      const isSpring = seasonStep <= 65 || seasonStep >= 235;
+      if (!isSpring)
+        return false;
+      const matureFlowers = state.nodes.filter((n) => n.type === "flower" && !n.isCut && (n.growthProgress ?? 1) >= 0.75);
+      return matureFlowers.length >= 3;
     }
   },
   {
@@ -4733,10 +5533,17 @@ var TOKONOMA_REWARD_CATALOG = [
       particleType: "glow"
     },
     description: "Aus Granit gemeißelte Schneebetrachtungs-Laterne mit breitem Schirmdach und Dreibeinfüßen, in der eine warme Flamme brennt.",
-    unlockCondition: "Pflege deinen Baum durch die winterliche Kälteperiode (Schritt 180+ im Zyklus).",
+    unlockCondition: "Pflege einen reifen Bonsai (mindestens 6 Astsegmente) durch die frostige Winterperiode (Schritt 180+ im Jahreszyklus bei intakter Bodenfeuchte).",
     checkUnlocked: (state) => {
-      const season = state.step % (state.cycleLength || 250);
-      return season >= 180;
+      const stems = state.nodes.filter((n) => !n.isCut && (n.type === "stem" || n.type === "meristem"));
+      if (stems.length < 6)
+        return false;
+      if ((state.step || 0) < 180)
+        return false;
+      const seasonStep = state.step % (state.cycleLength || 250);
+      const isWinter = seasonStep >= 180 && seasonStep <= 245;
+      const moistureOk = (state.soilMoisture ?? 0.5) >= 0.25;
+      return isWinter && moistureOk;
     }
   }
 ];
@@ -4829,6 +5636,7 @@ var wateringCan = {
   alpha: 0
 };
 var isPouring = false;
+var currentRakeStroke = null;
 var breatheInterval = null;
 var breathePhase = "inhale";
 function setTool(tool) {
@@ -5127,11 +5935,13 @@ function newPlant(newSeed = Math.random() * 1e9 | 0, targetSpeciesId) {
   prng = createPrng(seed);
   const sp = (targetSpeciesId ? getSpeciesById(targetSpeciesId) : undefined) ?? SPECIES[Math.floor(Math.random() * SPECIES.length)];
   const genome = generateGenomeForSpecies(sp, seed);
+  const prevTransparent = !!win.state?.foliageTransparent;
   win.state = freshState(genome, sp, { seed });
+  win.state.foliageTransparent = prevTransparent;
   const savedRewards = loadRewardsFromStorage();
   win.state.unlockedRewards = savedRewards.unlockedIds;
   win.state.activeAccoutrements = savedRewards.active;
-  for (let i = 0;i < 80; i++)
+  for (let i = 0;i < 48; i++)
     win.state = growOnce(win.state, prng);
   syncDesignControls();
   updateSpeciesUI(sp.id);
@@ -5272,18 +6082,25 @@ function getPlantCoord(clientX, clientY) {
 }
 function startWatering(cx, cy) {
   isPouring = true;
+  const win = window;
+  const r = canvas.getBoundingClientRect();
+  const potCenterX = r.width / 2 + (win.state?.cameraX ?? 0);
+  const facingLeft = cx >= potCenterX;
+  const offsetX = facingLeft ? 65 : -65;
   if (!wateringCan.active) {
     wateringCan.active = true;
-    wateringCan.x = cx + 75;
+    wateringCan.facingLeft = facingLeft;
+    wateringCan.x = cx + offsetX;
     wateringCan.y = cy - 20;
-    wateringCan.targetX = cx + 75;
+    wateringCan.targetX = cx + offsetX;
     wateringCan.targetY = cy - 45;
     wateringCan.tiltAngle = 0;
     wateringCan.pourProgress = 0;
     wateringCan.liftProgress = 0;
     wateringCan.alpha = 0.2;
   } else {
-    wateringCan.targetX = cx + 75;
+    wateringCan.facingLeft = facingLeft;
+    wateringCan.targetX = cx + offsetX;
     wateringCan.targetY = cy - 45;
   }
   try {
@@ -5292,7 +6109,13 @@ function startWatering(cx, cy) {
   draw();
 }
 function updateWateringTarget(cx, cy) {
-  wateringCan.targetX = cx + 75;
+  const win = window;
+  const r = canvas.getBoundingClientRect();
+  const potCenterX = r.width / 2 + (win.state?.cameraX ?? 0);
+  const facingLeft = cx >= potCenterX;
+  const offsetX = facingLeft ? 65 : -65;
+  wateringCan.facingLeft = facingLeft;
+  wateringCan.targetX = cx + offsetX;
   wateringCan.targetY = cy - 45;
 }
 function stopWatering() {
@@ -5331,24 +6154,30 @@ function rakeSandAt(canvasX, canvasY) {
   const oy = r.height * 0.82 + (win.state.cameraY ?? 0);
   const xTray = canvasX - ox;
   const yTray = canvasY - oy;
-  if (!win.state.sandRipples)
-    win.state.sandRipples = [];
-  const ripples = win.state.sandRipples;
-  const lastRipple = ripples[ripples.length - 1];
-  const dist = lastRipple ? Math.hypot(xTray - lastRipple.x, yTray - lastRipple.y) : 999;
-  if (dist > 9) {
-    ripples.push({
-      x: xTray,
-      y: yTray,
-      radius: 12 + Math.random() * 8,
-      intensity: 0.95
-    });
-    if (ripples.length > 55)
-      ripples.shift();
+  if (!win.state.sandStrokes)
+    win.state.sandStrokes = [];
+  if (!currentRakeStroke) {
+    currentRakeStroke = { points: [{ x: xTray, y: yTray }], width: 18, intensity: 1 };
+    win.state.sandStrokes.push(currentRakeStroke);
+    if (win.state.sandStrokes.length > 25)
+      win.state.sandStrokes.shift();
     try {
       playRakeSound();
     } catch {}
     draw();
+  } else {
+    const pts = currentRakeStroke.points;
+    const last = pts[pts.length - 1];
+    const dist = Math.hypot(xTray - last.x, yTray - last.y);
+    if (dist >= 7) {
+      pts.push({ x: xTray, y: yTray });
+      if (Math.random() < 0.22) {
+        try {
+          playRakeSound();
+        } catch {}
+      }
+      draw();
+    }
   }
 }
 canvas.addEventListener("pointerdown", (e) => {
@@ -5417,6 +6246,18 @@ canvas.addEventListener("pointermove", (e) => {
     draw();
     return;
   }
+  if (win.state) {
+    const plantPt = getPlantCoord(e.clientX, e.clientY);
+    const oldX = win.state.cursorWorldX;
+    const oldY = win.state.cursorWorldY;
+    win.state.cursorWorldX = plantPt.x;
+    win.state.cursorWorldY = plantPt.y;
+    if (activePointerId === null && !dragging) {
+      if (oldX === undefined || Math.hypot(plantPt.x - oldX, plantPt.y - (oldY ?? 0)) >= 3) {
+        draw();
+      }
+    }
+  }
   if (activePointerId !== e.pointerId)
     return;
   const dx = e.clientX - pointerDownX;
@@ -5425,8 +6266,34 @@ canvas.addEventListener("pointermove", (e) => {
   const r = canvas.getBoundingClientRect();
   const canvasX = e.clientX - r.left;
   const canvasY = e.clientY - r.top;
-  if (currentTool === "shear" || currentTool === "jin") {
+  if (currentTool === "shear") {
     slashPoints.push({ x: canvasX, y: canvasY, time: Date.now() });
+    draw();
+  } else if (currentTool === "jin") {
+    slashPoints.push({ x: canvasX, y: canvasY, time: Date.now() });
+    const win = window;
+    if (win.state) {
+      const pt = getPlantCoord(e.clientX, e.clientY);
+      const stemTransforms = getStemTransforms();
+      const hitRadius = (dev.hitRadius ?? 20) * 1.35;
+      for (const tr of stemTransforms.values()) {
+        const hit = closestPointOnQuadratic(pt, tr.startX, tr.startY, tr.controlX, tr.controlY, tr.endX, tr.endY);
+        if (hit.distance <= hitRadius) {
+          const node = win.state.nodes.find((n) => n.id === tr.nodeId);
+          if (node && !node.isJin && (node.type === "stem" || node.type === "meristem")) {
+            saveHistory();
+            const res = carveBranchToJin(win.state, tr.nodeId);
+            if (res.carved) {
+              win.state = res.state;
+              try {
+                playJinSound();
+              } catch {}
+              checkSchoolsAndUnlocks("jin");
+            }
+          }
+        }
+      }
+    }
     draw();
   } else if (currentTool === "water") {
     updateWateringTarget(canvasX, canvasY);
@@ -5454,6 +6321,14 @@ canvas.addEventListener("pointermove", (e) => {
     }
   }
 });
+canvas.addEventListener("pointerleave", () => {
+  const win = window;
+  if (win.state && (win.state.cursorWorldX !== undefined || win.state.cursorWorldY !== undefined)) {
+    win.state.cursorWorldX = undefined;
+    win.state.cursorWorldY = undefined;
+    draw();
+  }
+});
 canvas.addEventListener("pointerup", (e) => {
   if (dragging) {
     dragging = false;
@@ -5469,6 +6344,7 @@ canvas.addEventListener("pointerup", (e) => {
     stopWatering();
   }
   if (currentTool === "rake") {
+    currentRakeStroke = null;
     saveHistory();
     return;
   }
@@ -5538,6 +6414,21 @@ canvas.addEventListener("pointerup", (e) => {
       }
     }
   } else if (currentTool === "wire" && activeWireNodeId !== null) {
+    if (pointerMovedDist < 8) {
+      const hitNode = win.state.nodes.find((n) => n.id === activeWireNodeId);
+      if (hitNode && hitNode.hasWire) {
+        saveHistory();
+        const wireRes = removeWire(win.state, activeWireNodeId);
+        win.state = wireRes.state;
+        try {
+          playWireSound();
+        } catch {}
+        draw();
+        checkSchoolsAndUnlocks("wire");
+        activeWireNodeId = null;
+        return;
+      }
+    }
     saveHistory();
     playWireSound();
     activeWireNodeId = null;
@@ -5593,6 +6484,36 @@ $("btn-time-speed")?.addEventListener("click", (e) => {
   win.state.timeSpeed = nextSpeed;
   e.currentTarget.textContent = `⏳ ${nextSpeed}x`;
   draw();
+});
+function toggleFoliageTransparency() {
+  getAudioContext();
+  const win = window;
+  if (!win.state)
+    return;
+  win.state.foliageTransparent = !win.state.foliageTransparent;
+  const isTransparent = !!win.state.foliageTransparent;
+  const btnTop = $("btn-foliage-xray");
+  if (btnTop) {
+    btnTop.classList.toggle("active", isTransparent);
+    btnTop.textContent = isTransparent ? "\uD83D\uDC41️" : "\uD83C\uDF43";
+    btnTop.title = isTransparent ? "Laub-Transparenz aktiv (Skelettschau) [Taste X]" : "Laub-Transparenz umschalten (Skelettschau) [Taste X]";
+  }
+  const btnDrawer = $("btn-xray");
+  if (btnDrawer) {
+    btnDrawer.textContent = isTransparent ? "Laub-Durchsicht: AN" : "Laub-Durchsicht: AUS";
+    btnDrawer.style.background = isTransparent ? "#0284c7" : "#1e293b";
+  }
+  try {
+    playDefoliateSound();
+  } catch {}
+  showAchievementToast(isTransparent ? "\uD83D\uDC41️" : "\uD83C\uDF43", isTransparent ? "Skelettschau aktiviert" : "Skelettschau deaktiviert", isTransparent ? "Blätter und Blüten sind transparent — Astwerk, Drahtung und Totholz liegen frei." : "Natürliche Dichte der Blätter und Blüten wiederhergestellt.");
+  draw();
+}
+$("btn-foliage-xray")?.addEventListener("click", () => {
+  toggleFoliageTransparency();
+});
+$("btn-xray")?.addEventListener("click", () => {
+  toggleFoliageTransparency();
 });
 $("tool-shear")?.addEventListener("click", () => setTool("shear"));
 $("tool-water")?.addEventListener("click", () => setTool("water"));
@@ -5659,6 +6580,15 @@ $("modal-faq")?.addEventListener("click", (e) => {
     closeFaqModal();
 });
 window.addEventListener("keydown", (e) => {
+  const targetTag = e.target?.tagName?.toUpperCase();
+  const isInput = targetTag === "INPUT" || targetTag === "TEXTAREA" || targetTag === "SELECT";
+  if (!isInput) {
+    if (e.key === "x" || e.key === "X") {
+      e.preventDefault();
+      toggleFoliageTransparency();
+      return;
+    }
+  }
   if (e.key === "Escape") {
     closeGalleryModal();
     closeFaqModal();
@@ -5948,32 +6878,28 @@ function animLoop(now) {
       wateringCan.liftProgress = Math.min(1, wateringCan.liftProgress + dt * 3.5);
       wateringCan.pourProgress = Math.min(1, wateringCan.pourProgress + dt * 4);
       wateringCan.alpha = Math.min(1, wateringCan.alpha + dt * 5);
-      const targetTilt = 0.65;
+      const targetTilt = -0.55;
       wateringCan.tiltAngle += (targetTilt - wateringCan.tiltAngle) * Math.min(1, dt * 7);
-      if (wateringCan.tiltAngle > 0.25) {
+      if (Math.abs(wateringCan.tiltAngle) > 0.2) {
         const rose = getCopperCanRosePosition(wateringCan);
-        const jetsToEmit = 4;
+        const jetsToEmit = 3;
         for (let j = 0;j < jetsToEmit; j++) {
-          const spread = (Math.random() - 0.5) * 0.35;
+          const spread = (Math.random() - 0.5) * 0.16;
           const jetAngle = rose.angle + spread;
-          const jetSpeed = 160 + Math.random() * 110;
+          const jetSpeed = 38 + Math.random() * 24;
           waterStreams.push({
-            x: rose.x + (Math.random() - 0.5) * 6,
-            y: rose.y + (Math.random() - 0.5) * 4,
+            x: rose.x + (Math.random() - 0.5) * 4,
+            y: rose.y + (Math.random() - 0.5) * 3,
             vx: Math.cos(jetAngle) * jetSpeed,
             vy: Math.sin(jetAngle) * jetSpeed,
-            len: 18 + Math.random() * 14,
+            len: 14 + Math.random() * 8,
             alpha: 0.95,
-            thickness: 1.1 + Math.random() * 0.35,
+            thickness: 0.85 + Math.random() * 0.3,
             seed: Math.random()
           });
         }
         if (win.state) {
-          win.state.soilMoisture = Math.min(1, (win.state.soilMoisture ?? 0.5) + dt * 0.08);
-          if (Math.random() < 0.08) {
-            win.state = growOnce(win.state, prng);
-            growthRedrawNeeded = true;
-          }
+          win.state.soilMoisture = Math.min(1, (win.state.soilMoisture ?? 0.5) + dt * 0.15);
         }
       }
     } else {
@@ -5981,14 +6907,14 @@ function animLoop(now) {
       wateringCan.pourProgress = Math.max(0, wateringCan.pourProgress - dt * 3.5);
       wateringCan.liftProgress = Math.max(0, wateringCan.liftProgress - dt * 3);
       wateringCan.alpha = Math.max(0, wateringCan.alpha - dt * 2.8);
-      if (wateringCan.alpha <= 0.02 && wateringCan.tiltAngle < 0.05) {
+      if (wateringCan.alpha <= 0.02 && Math.abs(wateringCan.tiltAngle) < 0.05) {
         wateringCan.active = false;
       }
     }
     fxRedrawNeeded = true;
   }
   if (waterStreams.length > 0) {
-    const gravity = 620;
+    const gravity = 320;
     for (const s of waterStreams) {
       s.x += s.vx * dt;
       s.y += s.vy * dt;
@@ -6032,8 +6958,8 @@ function animLoop(now) {
   const timeMultiplier = win.state?.timeSpeed ?? 1;
   const currentGrowSpeed = (win.state?.growSpeed ?? 1) * timeMultiplier;
   if (playing && win.state && currentGrowSpeed > 0) {
-    const elongationRate = 7 * currentGrowSpeed * dt;
-    const leafUnfurlRate = 1.8 * currentGrowSpeed * dt;
+    const elongationRate = 0.75 * currentGrowSpeed * dt;
+    const organUnfurlRate = 0.08 * currentGrowSpeed * dt;
     for (const n of win.state.nodes) {
       if (!n.isCut && n.terminal && (n.type === "meristem" || n.type === "stem")) {
         if (n.length < n.targetLength) {
@@ -6041,12 +6967,12 @@ function animLoop(now) {
           growthRedrawNeeded = true;
         }
       }
-      if (n.type === "leaf" && (n.age ?? 0) < 5) {
-        n.age = Math.min(5, (n.age ?? 0) + leafUnfurlRate);
+      if ((n.type === "leaf" || n.type === "flower") && (n.growthProgress ?? 1) < 1) {
+        n.growthProgress = Math.min(1, (n.growthProgress ?? 0.08) + organUnfurlRate);
         growthRedrawNeeded = true;
       }
     }
-    const stepInterval = Math.max(90, 480 / currentGrowSpeed);
+    const stepInterval = Math.max(500, 3200 / currentGrowSpeed);
     if (now - lastGrowTime > stepInterval) {
       lastGrowTime = now;
       if (autoHistoryCounter % 15 === 0) {

@@ -113,7 +113,7 @@ export function growOnce(
     epicormicStep(newState, prng);
   }
 
-  if (season < 140 && newState.step % 5 === 0) {
+  if (season < 140 && newState.step % 6 === 0) {
     spawnLeavesOnBranches(newState, prng);
   }
 
@@ -125,10 +125,36 @@ export function growOnce(
     newState.resources = { energy: 0, water: 0, structural: 0 };
   }
 
+  const moistureFactor = Math.max(0.4, newState.soilMoisture ?? 0.5);
+  const plantVigor = Math.max(0.3, expressTrait(newState.genome, "vigor") || 0.5);
+
   newState.nodes.forEach((n, i) => {
     if (n.age !== undefined) {
       const clone = getClone(n);
       clone.age++;
+
+      // Gradual leaf unfurling and floral anthesis (bud -> swelling -> bloom)
+      if (clone.type === "leaf" || clone.type === "flower") {
+        const advanceRate = clone.type === "leaf" ? 0.05 : 0.035;
+        clone.growthProgress = Math.min(1.0, (clone.growthProgress ?? 0.08) + advanceRate * moistureFactor);
+      }
+
+      // Wound healing & callus roll (Maki-komi 巻き込み) on pruned stems
+      if (clone.isCut && !clone.isJin) {
+        const healRate = 0.035 * moistureFactor * plantVigor;
+        clone.callusStage = Math.min(1.0, (clone.callusStage ?? 0) + healRate);
+        clone.callusSwelling = Math.min(1.0, (clone.callusSwelling ?? 0) + healRate * 1.3);
+      }
+
+      // Bonsai wiring lifecycle: aging, lignification, and wire bite (Kikomi 食い込み)
+      if (clone.hasWire && !clone.isJin) {
+        clone.wireAge = (clone.wireAge ?? 0) + 1;
+        if (clone.wireAge > 35) {
+          clone.hasWireBite = true;
+          clone.wireBiteSeverity = Math.min(1.0, (clone.wireAge - 35) / 20);
+        }
+      }
+
       newState.nodes[i] = clone;
     }
   });
@@ -218,6 +244,7 @@ export function growOnce(
         targetLength: expressTrait(g, "flowerRadius"),
         v: 0,
         budState: "dormant",
+        growthProgress: 0.06,
         isCut: false,
         resourceProduction: 0,
         shade: tip.shade,
@@ -267,18 +294,19 @@ export function growOnce(
     const apicalBrake = 1 / (1 + expressTrait(g, "apicalDominance") * tip.depth * 0.15);
     const competitionBrake = 30 / (30 + tips.length * 0.5);  // Stricter competition brake
     const shadeFactor = Math.max(0.2, 1 - tip.shade);
-    const branchChance = safeV * 0.4 * energyFactor * densityBrake * apicalBrake * competitionBrake * shadeFactor;
+    const branchChance = safeV * 0.25 * energyFactor * densityBrake * apicalBrake * competitionBrake * shadeFactor;
     const nBranches = prng.random() < branchChance ? 2 : 1;
 
     for (let b = 0; b < nBranches; b++) {
-      const spread = (expressTrait(g, "angle") * Math.PI) / 180 * Math.max(0.3, 1 - expressTrait(g, "vineMode") * 0.7);
-      const direction = nBranches === 1 ? (prng.random() - 0.5) * 0.2 : (b === 0 ? -spread : spread);
+      const spread = (expressTrait(g, "angle") * Math.PI) / 180 * Math.max(0.4, 1 - expressTrait(g, "vineMode") * 0.7);
+      const direction = nBranches === 1 ? (prng.random() - 0.5) * 0.15 : (b === 0 ? -spread : spread);
       let nextAngle = normalizeAngle(angle + direction);
       if (nextAngle > 0) nextAngle = 0;
       if (nextAngle < -Math.PI) nextAngle = -Math.PI;
 
       const daughterV = safeV - (expressTrait(g, "decay") + prng.random() * expressTrait(g, "decay") * 0.5);
-      const daughterTargetLen = expressTrait(g, "lenScale") * Math.pow(Math.max(0, daughterV), 1.2) * (1 + expressTrait(g, "vineMode") * 0.5);
+      const lenScaleVal = expressTrait(g, "lenScale");
+      const daughterTargetLen = Math.max(14, lenScaleVal * Math.pow(Math.max(0.2, daughterV), 0.75) * (1 + expressTrait(g, "vineMode") * 0.5));
 
       nextNodes.push({
         id: -((newState.idCounter++) * 100 + b),
@@ -325,6 +353,7 @@ export function growOnce(
         targetLength: 15,
         v: 0,
         budState: "dormant",
+        growthProgress: 0.08,
         isCut: false,
         resourceProduction: 0.1 + prng.random() * 0.2,
         shade: tip.shade,
@@ -412,6 +441,9 @@ export function growOnce(
     newState.nodes = newState.nodes.filter((n) => !(n.fallState === "falling" && (n.fallAge ?? 0) > MAX_FALL_STEPS));
   }
 
+  // Calculate distal foliage/blossom weight and subtle reaction wood deflection
+  calculateReactionWoodAndWeight(newState);
+
   return newState;
 }
 
@@ -450,11 +482,12 @@ function budActivation(state: PlantState, prng: Prng): void {
     if (n.type !== "meristem" && n.type !== "stem") return;
     if (n.isCut) return;
     if (n.depth < 1) return;
+    if (n.length < 10) return; // Prevent buds clustering on newly created micro-segments
     const hasBudChild = nodes.some(
       (c) => c.parentId === n.id && (c.type === "bud" || c.type === "meristem")
     );
     if (hasBudChild) return;
-    if (prng.random() > 0.35 * densityBrakeBud) return;
+    if (prng.random() > 0.08 * densityBrakeBud) return;
 
     const endX = n.x + Math.cos(n.angle) * n.targetLength;
     const endY = n.y + Math.sin(n.angle) * n.targetLength;
@@ -502,6 +535,7 @@ function budActivation(state: PlantState, prng: Prng): void {
         targetLength: 15,
         v: 0,
         budState: "dormant",
+        growthProgress: 0.08,
         isCut: false,
         resourceProduction: 0.1 + prng.random() * 0.2,
         shade: n.shade,
@@ -532,14 +566,16 @@ function spawnLeavesOnBranches(state: PlantState, prng: Prng): void {
     if (n.isCut) return;
     if (n.depth < 1) return;  // Allow leaves on all branch depths
     if (n.age < 2) return;
-    const hasLeafChild = nodes.some(
+    const leafChildren = nodes.filter(
       (c) => c.parentId === n.id && c.type === "leaf"
     );
-    if (hasLeafChild) return;
+    const maxLeavesForStem = Math.min(3, Math.max(1, Math.floor(n.length / 10)));
+    if (leafChildren.length >= maxLeavesForStem) return;
     if (prng.random() > expressTrait(g, "leafDensity") * 0.95) return; // High probability of dense, stable foliage
 
-    const endX = n.x + Math.cos(n.angle) * n.length;
-    const endY = n.y + Math.sin(n.angle) * n.length;
+    const attachT = 0.35 + 0.55 * (leafChildren.length / maxLeavesForStem);
+    const endX = n.x + Math.cos(n.angle) * n.length * attachT;
+    const endY = n.y + Math.sin(n.angle) * n.length * attachT;
     const side = prng.random() < 0.5 ? -1 : 1;
 
     newLeaves.push({
@@ -556,6 +592,7 @@ function spawnLeavesOnBranches(state: PlantState, prng: Prng): void {
       targetLength: 12,
       v: 0,
       budState: "dormant",
+      growthProgress: 0.08,
       isCut: false,
       resourceProduction: 0.1 + prng.random() * 0.2,
       shade: n.shade,
@@ -567,6 +604,7 @@ function spawnLeavesOnBranches(state: PlantState, prng: Prng): void {
       fruitAge: 0,
       fallState: "attached",
       fallSeed: prng.random(),
+      attachT,
     });
   });
 
@@ -599,6 +637,78 @@ export function triggerAbscissionIfDue(state: PlantState, season: number, prng: 
       n.fallRotSpeed = (prng.random() - 0.5) * 0.16;
       n.fallSwayPhase = prng.random() * Math.PI * 2;
       n.fallAge = 0;
+    }
+  }
+}
+
+/**
+ * Calculates distal gravitational foliage & blossom weight and subtle reaction wood deflection.
+ * Stems bearing heavy foliage clusters sag gently downwards; aged stems develop reaction wood
+ * counterbalancing the sag (subtle, clamped to realistic low-angle deflections).
+ */
+export function calculateReactionWoodAndWeight(state: PlantState): void {
+  const nodes = state.nodes;
+  if (!nodes || nodes.length === 0) return;
+
+  const stiffness = Math.max(0.5, expressTrait(state.genome, "stiffness") || 1.0);
+  const leafSize = Math.max(0.5, expressTrait(state.genome, "leafSize") || 1.0);
+  const flowerRad = Math.max(3, expressTrait(state.genome, "flowerRadius") || 8);
+
+  // Group children by parentId for fast bottom-up traversal
+  const childrenMap = new Map<number, PlantNode[]>();
+  for (const n of nodes) {
+    if (n.parentId !== null) {
+      let list = childrenMap.get(n.parentId);
+      if (!list) {
+        list = [];
+        childrenMap.set(n.parentId, list);
+      }
+      list.push(n);
+    }
+  }
+
+  // Post-order traversal by sorting nodes descending by depth
+  const sorted = [...nodes].sort((a, b) => (b.depth ?? 0) - (a.depth ?? 0));
+
+  for (const n of sorted) {
+    let ownWeight = 0;
+    if (n.type === "leaf") {
+      const p = n.growthProgress ?? 0.8;
+      ownWeight = 0.16 * leafSize * (n.leafSizeJitter ?? 1.0) * p;
+    } else if (n.type === "flower") {
+      const p = n.growthProgress ?? 0.8;
+      ownWeight = 0.32 * (flowerRad / 8) * p;
+    } else if (n.type === "stem" || n.type === "meristem") {
+      const approxThick = Math.max(1.0, 4.5 / (1 + (n.depth ?? 0) * 0.45));
+      ownWeight = 0.02 * n.length * approxThick;
+    }
+
+    const children = childrenMap.get(n.id) || [];
+    let subtreeWeight = ownWeight;
+    for (const c of children) {
+      subtreeWeight += c.distalWeight ?? 0;
+    }
+    n.distalWeight = subtreeWeight;
+
+    // Calculate subtle biomechanical sag on stem / meristem segments
+    if (n.type === "stem" || n.type === "meristem") {
+      const approxThick = Math.max(0.8, 3.5 / (1 + (n.depth ?? 0) * 0.4));
+      const flexuralResistance = Math.pow(approxThick, 1.8) * stiffness * 1.8;
+
+      // Downward deflection: strongest when branch is horizontal (cos ~ 1)
+      const cosHorizontal = Math.abs(Math.cos(n.angle));
+      const rawSag = (subtreeWeight / (flexuralResistance + 0.4)) * 0.09 * cosHorizontal;
+
+      // Reaction wood (Druckholz / Zugholz):
+      // Stems older than 20 steps form counter-active reaction wood that stiffens and lifts
+      const lignification = Math.min(0.8, (n.age ?? 0) / 40);
+      const netSag = Math.min(0.12, Math.max(0, rawSag * (1.0 - lignification)));
+
+      // Direct towards gravity
+      const sign = Math.cos(n.angle) >= 0 ? 1 : -1;
+      n.reactionWoodSag = sign * netSag;
+    } else {
+      n.reactionWoodSag = 0;
     }
   }
 }
@@ -715,6 +825,8 @@ export function pruneNodeAt(state: PlantState, targetNodeId: number, t: number):
   targetNode.length = Math.max(minStub, originalLength * cutT);
   targetNode.targetLength = targetNode.length;
   targetNode.isCut = true;
+  targetNode.callusStage = 0;
+  targetNode.callusSwelling = 0;
   targetNode.terminal = false;
   targetNode.v = 0;
   if (targetNode.type === "meristem") targetNode.type = "stem";
@@ -745,8 +857,8 @@ export function pruneNodeAt(state: PlantState, targetNodeId: number, t: number):
   // Differential sap pressure and vigor dynamics:
   // Thicker branches lose substantially more water resources (sap pressure) and energy.
   const isBroken = Boolean(targetNode.isBroken);
-  const waterLoss = isBroken ? thickness * 6.5 : (thickness > 3.0 ? thickness * 3.8 : 1.2);
-  const energyLoss = isBroken ? thickness * 4.5 : (thickness > 3.0 ? thickness * 2.2 : 0.8);
+  const waterLoss = isBroken ? thickness * 6.5 : (thickness > 2.2 ? thickness * 3.8 : 1.2);
+  const energyLoss = isBroken ? thickness * 4.5 : (thickness > 2.2 ? thickness * 2.2 : 0.8);
 
   if (newState.resources) {
     newState.resources = {
@@ -789,41 +901,6 @@ export function pruneNodeAt(state: PlantState, targetNodeId: number, t: number):
         awakenedAny = true;
       }
     }
-  }
-
-  // If no existing buds were found to awaken, sprout a new back-bud on the remaining stub!
-  if (!awakenedAny && targetNode.length > 0.8 && newState.nodes.length < MAX_TOTAL_NODES) {
-    const stubT = 0.7;
-    const budX = targetNode.x + Math.cos(targetNode.angle) * targetNode.length * stubT;
-    const budY = targetNode.y + Math.sin(targetNode.angle) * targetNode.length * stubT;
-    const side = Math.random() < 0.5 ? -1 : 1;
-    newState.nodes.push({
-      id: -newState.idCounter++,
-      parentId: targetNode.id,
-      x: budX,
-      y: budY,
-      angle: normalizeAngle(targetNode.angle + side * 1.1),
-      depth: targetNode.depth + 1,
-      type: "meristem",
-      terminal: true,
-      age: 0,
-      length: 0,
-      targetLength: expressTrait(state.genome, "lenScale") * 0.9,
-      v: Math.max(0.4, expressTrait(state.genome, "vigor") * 0.7),
-      budState: "active",
-      isCut: false,
-      resourceProduction: 0,
-      shade: targetNode.shade,
-      curve: (Math.random() - 0.5) * 0.3,
-      leafSizeJitter: 0,
-      leafShapeJitter: 0,
-      leafHueShift: 0,
-      hasThorns: false,
-      fruitAge: 0,
-      fallState: "attached",
-      fallSeed: Math.random(),
-      attachT: stubT,
-    });
   }
 
   newState.step++;
@@ -908,6 +985,8 @@ export function freshState(
     timelapseFrames: [],
     isRecording: false,
   };
+
+  calculateReactionWoodAndWeight(initialState);
 
   return initialState;
 }

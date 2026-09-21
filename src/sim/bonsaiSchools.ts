@@ -157,6 +157,11 @@ export interface GeometricMetrics {
   sinuosity: number;
   lowestStemY: number; // in pot space: >0 is below rim, >38 is below base
   baseCaliper: number;
+  apexCaliper: number;
+  trunkTaper: number; // base thickness / apex thickness (>= 1.4 is desirable taper)
+  branchTiers: number; // distinct vertical branch levels along trunk
+  matureFoliageCount: number; // leaves with growthProgress >= 0.6
+  maturityStage: "seedling" | "young_stock" | "developed" | "masterwork";
   slendernessRatio: number;
   crownFoliageRatio: number; // fraction of foliage in top 25% of height
   bareTrunkFraction: number; // fraction of trunk height with no lateral branches
@@ -267,10 +272,51 @@ export function extractGeometricMetrics(state: PlantState): GeometricMetrics {
     }
   }
 
-  // Base caliper (thickness of first stem emerging above root)
+  // Precompute children mapping for Murray's law caliper calculation
+  const childrenByParent = new Map<number, PlantNode[]>();
+  for (const n of nodes) {
+    if (n.isCut) continue;
+    if (n.parentId !== null) {
+      let list = childrenByParent.get(n.parentId);
+      if (!list) {
+        list = [];
+        childrenByParent.set(n.parentId, list);
+      }
+      list.push(n);
+    }
+  }
+
+  const thickCache = new Map<number, number>();
+  function calcThick(n: PlantNode): number {
+    if (thickCache.has(n.id)) return thickCache.get(n.id)!;
+    const kids = childrenByParent.get(n.id) ?? [];
+    const childStems = kids.filter((c) => !c.isCut && (c.type === "stem" || c.type === "meristem"));
+    let t: number;
+    if (childStems.length === 0) {
+      const wood = Math.min(1.0, (n.age || 0) / 90);
+      t = (n.type === "meristem" ? 1.05 : 1.25) + wood * 0.35;
+    } else if (childStems.length === 1) {
+      t = calcThick(childStems[0]) + 0.16;
+    } else {
+      let sumP = 0;
+      for (const c of childStems) {
+        sumP += Math.pow(calcThick(c), 2.4);
+      }
+      t = Math.pow(sumP, 1 / 2.4) + 0.22;
+    }
+    if (n.depth === 0) t += 3.8;
+    else if (n.depth === 1) t += 2.0;
+
+    thickCache.set(n.id, t);
+    return t;
+  }
+
+  // Base caliper and apex caliper for Tachiagari (taper) calculation
   const baseNode = trunkPath.find((n) => n.type === "stem") || (trunkPath.length > 0 ? trunkPath[0] : root);
-  const baseThickness = Math.max(1.5, Math.min(25, (baseNode.age || 1) * 0.4 + 3.0));
-  const slendernessRatio = height / baseThickness;
+  const baseThickness = baseNode.id !== 0 ? calcThick(baseNode) : 3.0;
+  const apexThickness = apexNode.id !== 0 ? calcThick(apexNode) : 1.5;
+  const trunkTaper = Number((baseThickness / Math.max(0.5, apexThickness)).toFixed(2));
+  const slendernessRatio = Number((height / Math.max(1.0, baseThickness)).toFixed(1));
 
   // Crown Foliage Ratio: foliage points in top 25% of height (y <= minY + 0.25 * height)
   const topQuarterY = minY + 0.25 * height;
@@ -344,8 +390,8 @@ export function extractGeometricMetrics(state: PlantState): GeometricMetrics {
     }
   }
 
-  // Outer-Curve Branching Adherence
-  let outerCurveAdherence = 0.85;
+  // Outer-Curve Branching Adherence (Kyokusho)
+  let outerCurveAdherence = 1.0;
   if (trunkPath.length >= 3) {
     let evaluatedBranches = 0;
     let validBranches = 0;
@@ -355,6 +401,9 @@ export function extractGeometricMetrics(state: PlantState): GeometricMetrics {
       const pNext = trunkPath[i + 1];
 
       const bendX = (pPrev.x + pNext.x) / 2 - pCurr.x;
+      // Only bends with noticeable curvature have defined inside/outside curves
+      if (Math.abs(bendX) < 1.5) continue;
+
       const childBranches = stems.filter((s) => s.parentId === pCurr.id && !trunkNodeIds.has(s.id));
 
       for (const cb of childBranches) {
@@ -370,10 +419,10 @@ export function extractGeometricMetrics(state: PlantState): GeometricMetrics {
     }
   }
 
-  // Fault branches detection (Imi-eda)
+  // Fault branches detection (Imi-eda) - evaluated strictly on lateral branches emerging from trunk
   const faults: string[] = [];
   const branchHeights = stems
-    .filter((s) => s.parentId !== null && trunkNodeIds.has(s.parentId))
+    .filter((s) => s.parentId !== null && trunkNodeIds.has(s.parentId) && !trunkNodeIds.has(s.id))
     .map((s) => s.y);
   
   branchHeights.sort((a, b) => a - b);
@@ -395,6 +444,52 @@ export function extractGeometricMetrics(state: PlantState): GeometricMetrics {
     faults.push("Uchikomi (Äste in der Innenkurve)");
   }
 
+  const hasWireBite = nodes.some((n) => !n.isCut && n.hasWireBite);
+  if (hasWireBite) {
+    faults.push("Kikomi (Drahtnarbung: Draht ist ins lebende Holz eingewachsen)");
+  }
+
+  if (trunkTaper < 0.95 && stems.length >= 4) {
+    faults.push("Gyaku-mikiki (Umgekehrte Verjüngung: Stamm wird nach oben dicker)");
+  }
+
+  // Distinct primary branch tiers along trunk
+  const primaryLateralHeights: number[] = [];
+  for (const n of stems) {
+    if (n.parentId !== null && trunkNodeIds.has(n.parentId) && !trunkNodeIds.has(n.id)) {
+      primaryLateralHeights.push(n.y);
+    }
+  }
+  primaryLateralHeights.sort((a, b) => a - b);
+  let branchTiers = 0;
+  let lastTierY = -999999;
+  for (const by of primaryLateralHeights) {
+    if (Math.abs(by - lastTierY) > 0.07 * height) {
+      branchTiers++;
+      lastTierY = by;
+    }
+  }
+
+  // Mature foliage count (growthProgress >= 0.6)
+  let matureFoliageCount = 0;
+  for (const l of leaves) {
+    if ((l.growthProgress ?? 1.0) >= 0.6) {
+      matureFoliageCount++;
+    }
+  }
+
+  // Structural Maturity Classification
+  let maturityStage: "seedling" | "young_stock" | "developed" | "masterwork";
+  if (stems.length < 4) {
+    maturityStage = "seedling";
+  } else if (stems.length < 7) {
+    maturityStage = "young_stock";
+  } else if (stems.length < 12) {
+    maturityStage = "developed";
+  } else {
+    maturityStage = "masterwork";
+  }
+
   return {
     totalNodes: nodes.length,
     stemCount: stems.length,
@@ -411,6 +506,11 @@ export function extractGeometricMetrics(state: PlantState): GeometricMetrics {
     sinuosity: Number(sinuosity.toFixed(3)),
     lowestStemY: Number((lowestStemY - rootY).toFixed(1)),
     baseCaliper: Number(baseThickness.toFixed(1)),
+    apexCaliper: Number(apexThickness.toFixed(1)),
+    trunkTaper,
+    branchTiers,
+    matureFoliageCount,
+    maturityStage,
     slendernessRatio: Number(slendernessRatio.toFixed(1)),
     crownFoliageRatio: Number(crownFoliageRatio.toFixed(2)),
     bareTrunkFraction: Number(bareTrunkFraction.toFixed(2)),
@@ -451,13 +551,33 @@ export function evaluateBonsaiSchools(state: PlantState): BonsaiSchoolReport {
     }
   }
 
+  // Rigorous NBA Tier Classification requiring true horticultural maturity
   let tier: "none" | "novice" | "adept" | "master" | "kokufu" = "none";
-  if (highestScore >= 92) tier = "kokufu";
-  else if (highestScore >= 82) tier = "master";
-  else if (highestScore >= 68) tier = "adept";
-  else if (highestScore >= 50) tier = "novice";
+  if (
+    highestScore >= 88 &&
+    m.stemCount >= 10 &&
+    m.trunkTaper >= 1.45 &&
+    m.faultCount === 0 &&
+    m.branchTiers >= 3
+  ) {
+    tier = "kokufu";
+  } else if (
+    highestScore >= 80 &&
+    m.stemCount >= 8 &&
+    m.trunkTaper >= 1.30 &&
+    m.faultCount <= 1 &&
+    m.branchTiers >= 2
+  ) {
+    tier = "master";
+  } else if (highestScore >= 68 && m.stemCount >= 6) {
+    tier = "adept";
+  } else if (highestScore >= 48 && m.stemCount >= 4) {
+    tier = "novice";
+  } else {
+    tier = "none";
+  }
 
-  const faultPenalty = m.faultCount * 6;
+  const faultPenalty = m.faultCount * 8;
   const overallAestheticScore = Math.max(10, Math.min(100, Math.round(highestScore - faultPenalty)));
 
   const recommendations: string[] = [];
@@ -480,6 +600,56 @@ export function evaluateBonsaiSchools(state: PlantState): BonsaiSchoolReport {
   };
 }
 
+/**
+ * Common evaluator for structural maturity gates, taper (Tachiagari), and taboo branch penalties.
+ */
+function applyMaturityAndTaper(
+  rawScore: number,
+  m: GeometricMetrics,
+  strengths: string[],
+  feedback: string[],
+  isBunjingi = false
+): number {
+  let score = rawScore;
+
+  // Taper (Tachiagari) evaluation
+  if (m.trunkTaper >= 1.55) {
+    strengths.push("Exzellente Stammverjüngung (Tachiagari) von der Wurzelbasis zur Krone.");
+  } else if (m.trunkTaper >= 1.30) {
+    strengths.push("Gute, harmonische Stammverjüngung.");
+  } else if (m.trunkTaper < 1.15 && m.stemCount >= 4) {
+    score -= 18;
+    feedback.push("Geringe Stammverjüngung: Stamm wirkt zylindrisch wie ein Stab.");
+  } else if (m.trunkTaper < 1.0 && m.stemCount >= 4) {
+    score -= 28;
+    feedback.push("Umgekehrte Verjüngung (Gyaku-mikiki) stört die Tiefenwirkung gravierend.");
+  }
+
+  // Taboo branch fault penalties
+  for (const f of m.faults) {
+    if (f.includes("Kuruma-eda")) score -= 18;
+    else if (f.includes("Kannon-eda")) score -= 14;
+    else if (f.includes("Uchikomi")) score -= 16;
+    else if (f.includes("Kikomi")) score -= 12;
+    else if (f.includes("Gyaku-mikiki")) score -= 20;
+  }
+
+  // Structural Maturity Gates
+  if (m.stemCount < 4) {
+    if (score > 35) {
+      score = Math.min(score, 35);
+      feedback.push("Ungeformter Keimling: Noch keine bewertbare Bonsai-Struktur (mindestens 4-7 verholzte Astsegmente erforderlich).");
+    }
+  } else if (m.stemCount < (isBunjingi ? 6 : 7)) {
+    if (score > 58) {
+      score = Math.min(score, 58);
+      feedback.push("Junger Rohling: Primäräste noch im Aufbau. Für Meistergrade sind Sekundärverzweigung und Astetagen nötig.");
+    }
+  }
+
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 function scoreChokkan(m: GeometricMetrics): SchoolScore {
   let score = 100;
   const strengths: string[] = [];
@@ -491,19 +661,19 @@ function scoreChokkan(m: GeometricMetrics): SchoolScore {
     score -= 10;
     strengths.push("Gute aufrechte Haltung.");
   } else {
-    score -= Math.min(60, Math.round((m.apexOffsetRatio - 0.07) * 200));
+    score -= Math.min(60, Math.round((m.apexOffsetRatio - 0.07) * 220));
     feedback.push("Krone neigt sich zu stark zur Seite für den Chokkan-Stil.");
   }
 
-  if (m.sinuosity <= 1.04) {
+  if (m.sinuosity <= 1.03) {
     strengths.push("Gerader, würdevoller Stammverlauf.");
   } else {
-    score -= Math.min(40, Math.round((m.sinuosity - 1.04) * 120));
+    score -= Math.min(45, Math.round((m.sinuosity - 1.03) * 150));
     feedback.push("Stamm weist zu viele Biegungen für Chokkan auf; Drahtung begradigen.");
   }
 
   if (m.lowestStemY > 2) {
-    score -= 35;
+    score -= 40;
     feedback.push("Chokkan darf keine herabhängenden Äste unter Topfrand aufweisen.");
   }
 
@@ -514,12 +684,21 @@ function scoreChokkan(m: GeometricMetrics): SchoolScore {
     feedback.push("Stamm ist zu schlank für Chokkan (eher Bunjingi/Literatenstil).");
   }
 
-  if (m.bareTrunkFraction >= 0.70) {
+  if (m.bareTrunkFraction >= 0.65) {
     score -= 35;
     feedback.push("Chokkan benötigt eine harmonische Astverteilung im unteren und mittleren Bereich.");
+  } else if (m.bareTrunkFraction >= 0.20 && m.bareTrunkFraction <= 0.45) {
+    strengths.push("Harmonischer Freiraum des unteren Stammabschnitts.");
   }
 
-  score = Math.max(0, Math.min(100, score));
+  if (m.branchTiers >= 3) {
+    strengths.push("Vorbildliche Astetagen (Sanbō-zashi: linke, rechte und rückwärtige Raumäste).");
+  } else if (m.branchTiers < 2 && m.stemCount >= 7) {
+    score -= 20;
+    feedback.push("Chokkan erfordert eine klare vertikale Etagenstaffelung der Äste.");
+  }
+
+  score = applyMaturityAndTaper(score, m, strengths, feedback);
   return {
     styleId: "chokkan",
     style: BONSAI_STYLES.chokkan,
@@ -537,32 +716,36 @@ function scoreMoyogi(m: GeometricMetrics): SchoolScore {
 
   if (m.apexOffsetRatio <= 0.08) {
     strengths.push("Krone kehrt meisterhaft über das Nebari zurück.");
-  } else if (m.apexOffsetRatio <= 0.15) {
+  } else if (m.apexOffsetRatio <= 0.14) {
     score -= 12;
     strengths.push("Gute Kronenbalance über der Basis.");
   } else {
-    score -= Math.min(45, Math.round((m.apexOffsetRatio - 0.15) * 150));
+    score -= Math.min(50, Math.round((m.apexOffsetRatio - 0.14) * 180));
     feedback.push("Die Krone sollte sich wieder über die Wurzelbasis zurückbeugen.");
   }
 
-  if (m.sinuosity >= 1.10) {
+  if (m.sinuosity >= 1.08) {
     strengths.push("Lebendige, rhythmische Stammlinie mit harmonischen Kurven.");
-  } else if (m.sinuosity >= 1.06) {
+  } else if (m.sinuosity >= 1.05) {
     score -= 15;
     feedback.push("Etwas mehr Schwung im Stammverlauf nötig.");
   } else {
-    score -= 40;
+    score -= 45;
     feedback.push("Stamm ist zu gerade für Moyogi (Frei Aufrecht).");
   }
 
   if (m.outerCurveAdherence >= 0.70) {
-    strengths.push("Äste entspringen vorbildlich an den Außenradien der Kurven.");
+    strengths.push("Äste entspringen vorbildlich an den Außenradien der Kurven (Kyokusho).");
   } else {
-    score -= Math.min(25, Math.round((0.70 - m.outerCurveAdherence) * 45));
-    feedback.push("Äste sollten an den Außenseiten der Biegungen sitzen, nicht in den Falten.");
+    score -= Math.min(30, Math.round((0.70 - m.outerCurveAdherence) * 50));
+    feedback.push("Äste sollten an den Außenseiten der Biegungen sitzen, nicht in den Innenfalten.");
   }
 
-  score = Math.max(0, Math.min(100, score));
+  if (m.branchTiers >= 2) {
+    strengths.push("Gute räumliche Tiefengliederung der Astpartien.");
+  }
+
+  score = applyMaturityAndTaper(score, m, strengths, feedback);
   return {
     styleId: "moyogi",
     style: BONSAI_STYLES.moyogi,
@@ -593,10 +776,11 @@ function scoreShakan(m: GeometricMetrics): SchoolScore {
     feedback.push("Zu geringe Stammneigung für den Schrägstamm-Stil.");
   }
 
-  if (m.apexOffsetRatio >= 0.25) {
+  if (m.apexOffsetRatio >= 0.22) {
     strengths.push("Ausgeprägte optische Dynamik durch versetzten Scheitelpunkt.");
   } else {
-    score -= 30;
+    score -= 35;
+    feedback.push("Apex muss deutlich zur Neigungsseite versetzt sein.");
   }
 
   if (m.lowestStemY > 20) {
@@ -607,7 +791,7 @@ function scoreShakan(m: GeometricMetrics): SchoolScore {
     feedback.push("Herabhängende Äste deuten eher auf Halbkaskade hin.");
   }
 
-  score = Math.max(0, Math.min(100, score));
+  score = applyMaturityAndTaper(score, m, strengths, feedback);
   return {
     styleId: "shakan",
     style: BONSAI_STYLES.shakan,
@@ -625,21 +809,27 @@ function scoreKengai(m: GeometricMetrics): SchoolScore {
 
   if (m.lowestStemY > 38) {
     strengths.push(`Tief herabstürzende Kaskade (fällt ${m.lowestStemY.toFixed(0)}px unter Topfrand).`);
-    if (m.lowestStemY > 55) {
-      strengths.push("Ausdrucksstarker, dramatischer Felsabsturz.");
+    if (m.lowestStemY > 50) {
+      strengths.push("Ausdrucksstarker, dramatischer Felsabsturz tief unter das Gefäß.");
     }
-  } else if (m.lowestStemY > 20) {
-    score -= 35;
-    feedback.push("Astspitze taucht noch nicht tief genug unter den Topfboden (>38px) für Vollkaskade.");
   } else if (m.lowestStemY > 0) {
-    score -= 55;
-    feedback.push("Erfüllt aktuell nur die Kriterien für eine Halbkaskade (Han-Kengai).");
+    score -= 65;
+    feedback.push("Astspitze taucht nicht unter den Topfboden (>38px); erfüllt nur Halbkaskaden-Kriterien (Han-Kengai).");
   } else {
     score = 0;
     feedback.push("Keine herabhängenden Kaskadenäste vorhanden.");
   }
 
-  score = Math.max(0, Math.min(100, score));
+  if (score > 0) {
+    if (m.apexY < m.rootY) {
+      strengths.push("Erhabene Kopfpartie über dem Topfrand balanciert den tiefen Astfall.");
+    } else {
+      score -= 20;
+      feedback.push("Eine Kengai-Vollkaskade benötigt eine lebende Krone oberhalb des Topfrands.");
+    }
+    score = applyMaturityAndTaper(score, m, strengths, feedback);
+  }
+
   return {
     styleId: "kengai",
     style: BONSAI_STYLES.kengai,
@@ -658,7 +848,7 @@ function scoreHanKengai(m: GeometricMetrics): SchoolScore {
   if (m.lowestStemY > 4 && m.lowestStemY <= 38) {
     strengths.push(`Perfekte Halbkaskaden-Tiefe (${m.lowestStemY.toFixed(0)}px unter Topfrand, über Topfboden).`);
   } else if (m.lowestStemY > 38) {
-    score -= 40;
+    score -= 45;
     feedback.push("Ast fällt bereits zu tief unter den Topfboden; eher Vollkaskade (Kengai).");
   } else if (m.lowestStemY > 0) {
     score -= 20;
@@ -668,11 +858,16 @@ function scoreHanKengai(m: GeometricMetrics): SchoolScore {
     feedback.push("Kein Ast ragt unter den Topfrand.");
   }
 
-  if (m.width > m.height * 0.8) {
-    strengths.push("Weit ausgreifender, horizontaler Uferast.");
+  if (score > 0) {
+    if (m.width >= m.height * 0.75) {
+      strengths.push("Weit ausgreifender, horizontaler Uferast.");
+    } else {
+      score -= 20;
+      feedback.push("Halbkaskade erfordert eine stärkere horizontale Ausladung.");
+    }
+    score = applyMaturityAndTaper(score, m, strengths, feedback);
   }
 
-  score = Math.max(0, Math.min(100, score));
   return {
     styleId: "han-kengai",
     style: BONSAI_STYLES["han-kengai"],
@@ -688,28 +883,36 @@ function scoreBunjingi(m: GeometricMetrics): SchoolScore {
   const strengths: string[] = [];
   const feedback: string[] = [];
 
-  if (m.slendernessRatio >= 16) {
+  if (m.slendernessRatio >= 15) {
     strengths.push(`Hervorragende literarische Eleganz (Schlankheit ${m.slendernessRatio.toFixed(0)}:1).`);
   } else if (m.slendernessRatio >= 12) {
     score -= 15;
     strengths.push("Schlanke Silhouette.");
   } else {
-    score -= Math.min(50, Math.round((14 - m.slendernessRatio) * 6));
+    score -= Math.min(50, Math.round((15 - m.slendernessRatio) * 7));
     feedback.push("Stamm ist zu dick bzw. zu gedrungen für den Bunjingi-Stil (Literatenstil).");
   }
 
   if (m.bareTrunkFraction >= 0.65) {
     strengths.push("Erhabener, kahler Unterstamm voller Freiraum (Ma).");
   } else {
-    score -= Math.min(45, Math.round((0.65 - m.bareTrunkFraction) * 80));
+    score -= Math.min(45, Math.round((0.65 - m.bareTrunkFraction) * 85));
     feedback.push("Untere Äste entfernen, um den kargen, freien Stammcharakter zu betonen.");
   }
 
-  if (m.crownFoliageRatio >= 0.70) {
+  if (m.crownFoliageRatio >= 0.65) {
     strengths.push("Laubmasse sparsam und dicht im Kronenbereich konzentriert.");
+  } else {
+    score -= 25;
+    feedback.push("Blattwerk sollte auf das obere Kronenviertel konzentriert sein.");
   }
 
-  score = Math.max(0, Math.min(100, score));
+  if (m.branchTiers > 3) {
+    score -= 20;
+    feedback.push("Zu viele Astetagen widersprechen der asketischen Schlichtheit des Bunjingi.");
+  }
+
+  score = applyMaturityAndTaper(score, m, strengths, feedback, true);
   return {
     styleId: "bunjingi",
     style: BONSAI_STYLES.bunjingi,
@@ -725,32 +928,30 @@ function scoreFukinagashi(m: GeometricMetrics): SchoolScore {
   const strengths: string[] = [];
   const feedback: string[] = [];
 
-  if (m.windwardRatio >= 0.80) {
+  if (m.windwardRatio >= 0.78) {
     strengths.push(`Starke Windflucht: ${(m.windwardRatio * 100).toFixed(0)}% der Masse strömen nach ${m.windFlowDir === "left" ? "Links" : "Rechts"}.`);
   } else if (m.windwardRatio >= 0.70) {
     score -= 20;
     strengths.push("Spürbare Windströmung.");
   } else {
-    score -= Math.min(60, Math.round((0.75 - m.windwardRatio) * 150));
+    score -= Math.min(60, Math.round((0.78 - m.windwardRatio) * 160));
     feedback.push("Äste müssen einseitig in Lee-Richtung gestrafft und geformt werden.");
   }
 
-  // Fukinagashi requires noticeable windward lean of trunk or apex
   const absLean = Math.abs(m.leanAngleDeg);
-  if (absLean < 12 && m.apexOffsetRatio < 0.18) {
-    score -= 45;
+  if (absLean < 15 && m.apexOffsetRatio < 0.20) {
+    score -= 40;
     feedback.push("Fukinagashi erfordert eine spürbare Windneigung von Stamm und Krone.");
   } else if (absLean >= 18) {
     strengths.push(`Stamm neigt sich authentisch mit dem Wind (${absLean.toFixed(0)}°).`);
   }
 
-  // Bare tall trunks with apical foliage belong to Bunjingi (Literati), not Fukinagashi
   if (m.bareTrunkFraction >= 0.65 && m.slendernessRatio >= 14) {
     score -= 35;
     feedback.push("Hoher kahler Stamm ohne Windfahnen-Äste gehört zum Bunjingi-Stil.");
   }
 
-  score = Math.max(0, Math.min(100, score));
+  score = applyMaturityAndTaper(score, m, strengths, feedback);
   return {
     styleId: "fukinagashi",
     style: BONSAI_STYLES.fukinagashi,
@@ -766,7 +967,7 @@ function scoreJinShari(m: GeometricMetrics): SchoolScore {
   const strengths: string[] = [];
   const feedback: string[] = [];
 
-  if (m.deadwoodRatio >= 0.20 && m.deadwoodRatio <= 0.60) {
+  if (m.deadwoodRatio >= 0.18 && m.deadwoodRatio <= 0.60) {
     strengths.push(`Harmonischer Totholzanteil von ${(m.deadwoodRatio * 100).toFixed(0)}% (Wabi-Sabi Ästhetik).`);
   } else if (m.deadwoodRatio > 0.08) {
     score -= 25;
@@ -776,14 +977,24 @@ function scoreJinShari(m: GeometricMetrics): SchoolScore {
     feedback.push("Noch kein Totholz geschnitzt (Jin-Werkzeug nutzen).");
   }
 
-  if (m.hasContinuousLifeline) {
-    strengths.push("Lebensader (Mizusui) unversehrt: Alle Blätter sind vital versorgt.");
-  } else {
-    score -= 40;
-    feedback.push("Warnung: Eine Totholzpartie hat die Lebensader zu lebenden Trieben gekappt!");
+  if (score > 0) {
+    if (m.hasContinuousLifeline) {
+      strengths.push("Lebensader (Mizusui) unversehrt: Alle Blätter sind vital versorgt.");
+    } else {
+      score -= 45;
+      feedback.push("Warnung: Eine Totholzpartie hat die Lebensader zu lebenden Trieben gekappt!");
+    }
+
+    if (m.leafCount >= 3) {
+      strengths.push("Vitaler Kontrast zwischen gebleichtem Totholz und lebendiger Nadel-/Blattmasse.");
+    } else if (m.leafCount === 0) {
+      score -= 45;
+      feedback.push("Der Baum ist kahl abgestorben — Wabi-Sabi benötigt vitales lebendes Grün.");
+    }
+
+    score = applyMaturityAndTaper(score, m, strengths, feedback);
   }
 
-  score = Math.max(0, Math.min(100, score));
   return {
     styleId: "jin-shari",
     style: BONSAI_STYLES["jin-shari"],

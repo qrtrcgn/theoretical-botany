@@ -1,4 +1,4 @@
-import type { PlantState, WateringCanState, WaterStreamJet } from "../sim/types";
+import type { PlantState, PlantNode, WateringCanState, WaterStreamJet } from "../sim/types";
 import { createPrng, type Prng } from "../sim/prng";
 import { freshState, growOnce, pruneNodeAt } from "../sim/growth";
 import { breedGenomes, expressTrait } from "../sim/genetics";
@@ -48,6 +48,7 @@ import {
   swipeSliceCurvedStems,
   pluckLeavesAlongSwipe,
   bendStemWithWire,
+  removeWire,
   carveBranchToJin,
   swipeCarveCurvedStems,
 } from "../sim/precisionPrune";
@@ -117,6 +118,7 @@ let wateringCan: WateringCanState = {
   alpha: 0,
 };
 let isPouring = false;
+let currentRakeStroke: { points: Array<{ x: number; y: number }>; width: number; intensity: number } | null = null;
 let breatheInterval: number | null = null;
 let breathePhase: "inhale" | "hold" | "exhale" = "inhale";
 
@@ -457,13 +459,15 @@ function newPlant(newSeed = (Math.random() * 1e9) | 0, targetSpeciesId?: string)
   const sp = (targetSpeciesId ? getSpeciesById(targetSpeciesId) : undefined) ??
     SPECIES[Math.floor(Math.random() * SPECIES.length)];
   const genome = generateGenomeForSpecies(sp, seed);
+  const prevTransparent = !!win.state?.foliageTransparent;
   win.state = freshState(genome, sp, { seed });
+  win.state.foliageTransparent = prevTransparent;
 
   const savedRewards = loadRewardsFromStorage();
   win.state.unlockedRewards = savedRewards.unlockedIds;
   win.state.activeAccoutrements = savedRewards.active;
 
-  for (let i = 0; i < 80; i++) win.state = growOnce(win.state, prng);
+  for (let i = 0; i < 48; i++) win.state = growOnce(win.state, prng);
   syncDesignControls();
   updateSpeciesUI(sp.id);
   draw();
@@ -626,18 +630,26 @@ function getPlantCoord(clientX: number, clientY: number): { x: number; y: number
 
 function startWatering(cx: number, cy: number) {
   isPouring = true;
+  const win = window as any;
+  const r = canvas.getBoundingClientRect();
+  const potCenterX = r.width / 2 + (win.state?.cameraX ?? 0);
+  const facingLeft = cx >= potCenterX; // if right of pot, face left; if left of pot, face right
+  const offsetX = facingLeft ? 65 : -65;
+
   if (!wateringCan.active) {
     wateringCan.active = true;
-    wateringCan.x = cx + 75;
+    wateringCan.facingLeft = facingLeft;
+    wateringCan.x = cx + offsetX;
     wateringCan.y = cy - 20;
-    wateringCan.targetX = cx + 75;
+    wateringCan.targetX = cx + offsetX;
     wateringCan.targetY = cy - 45;
     wateringCan.tiltAngle = 0;
     wateringCan.pourProgress = 0;
     wateringCan.liftProgress = 0;
     wateringCan.alpha = 0.2;
   } else {
-    wateringCan.targetX = cx + 75;
+    wateringCan.facingLeft = facingLeft;
+    wateringCan.targetX = cx + offsetX;
     wateringCan.targetY = cy - 45;
   }
   try {
@@ -647,7 +659,13 @@ function startWatering(cx: number, cy: number) {
 }
 
 function updateWateringTarget(cx: number, cy: number) {
-  wateringCan.targetX = cx + 75;
+  const win = window as any;
+  const r = canvas.getBoundingClientRect();
+  const potCenterX = r.width / 2 + (win.state?.cameraX ?? 0);
+  const facingLeft = cx >= potCenterX;
+  const offsetX = facingLeft ? 65 : -65;
+  wateringCan.facingLeft = facingLeft;
+  wateringCan.targetX = cx + offsetX;
   wateringCan.targetY = cy - 45;
 }
 
@@ -701,22 +719,26 @@ function rakeSandAt(canvasX: number, canvasY: number) {
   const xTray = canvasX - ox;
   const yTray = canvasY - oy;
 
-  if (!win.state.sandRipples) win.state.sandRipples = [];
-  const ripples = win.state.sandRipples;
-  const lastRipple = ripples[ripples.length - 1];
-  const dist = lastRipple ? Math.hypot(xTray - lastRipple.x, yTray - lastRipple.y) : 999;
-  if (dist > 9) {
-    ripples.push({
-      x: xTray,
-      y: yTray,
-      radius: 12 + Math.random() * 8,
-      intensity: 0.95,
-    });
-    if (ripples.length > 55) ripples.shift();
+  if (!win.state.sandStrokes) win.state.sandStrokes = [];
+  if (!currentRakeStroke) {
+    currentRakeStroke = { points: [{ x: xTray, y: yTray }], width: 18, intensity: 1.0 };
+    win.state.sandStrokes.push(currentRakeStroke);
+    if (win.state.sandStrokes.length > 25) win.state.sandStrokes.shift();
     try {
       playRakeSound();
     } catch {}
     draw();
+  } else {
+    const pts = currentRakeStroke.points;
+    const last = pts[pts.length - 1];
+    const dist = Math.hypot(xTray - last.x, yTray - last.y);
+    if (dist >= 7) {
+      pts.push({ x: xTray, y: yTray });
+      if (Math.random() < 0.22) {
+        try { playRakeSound(); } catch {}
+      }
+      draw();
+    }
   }
 }
 
@@ -795,6 +817,22 @@ canvas.addEventListener("pointermove", (e) => {
     return;
   }
 
+  // Track cursor coordinates in plant space for leaf & bloom proximity translucency
+  if (win.state) {
+    const plantPt = getPlantCoord(e.clientX, e.clientY);
+    const oldX = win.state.cursorWorldX;
+    const oldY = win.state.cursorWorldY;
+    win.state.cursorWorldX = plantPt.x;
+    win.state.cursorWorldY = plantPt.y;
+
+    // Redraw when hovering freely over the canvas to dynamically adjust leaf/flower translucency
+    if (activePointerId === null && !dragging) {
+      if (oldX === undefined || Math.hypot(plantPt.x - oldX, plantPt.y - (oldY ?? 0)) >= 3) {
+        draw();
+      }
+    }
+  }
+
   if (activePointerId !== e.pointerId) return;
 
   const dx = e.clientX - pointerDownX;
@@ -805,8 +843,32 @@ canvas.addEventListener("pointermove", (e) => {
   const canvasX = e.clientX - r.left;
   const canvasY = e.clientY - r.top;
 
-  if (currentTool === "shear" || currentTool === "jin") {
+  if (currentTool === "shear") {
     slashPoints.push({ x: canvasX, y: canvasY, time: Date.now() });
+    draw();
+  } else if (currentTool === "jin") {
+    slashPoints.push({ x: canvasX, y: canvasY, time: Date.now() });
+    const win = window as any;
+    if (win.state) {
+      const pt = getPlantCoord(e.clientX, e.clientY);
+      const stemTransforms = getStemTransforms();
+      const hitRadius = (dev.hitRadius ?? 20) * 1.35;
+      for (const tr of stemTransforms.values()) {
+        const hit = closestPointOnQuadratic(pt, tr.startX, tr.startY, tr.controlX, tr.controlY, tr.endX, tr.endY);
+        if (hit.distance <= hitRadius) {
+          const node = win.state.nodes.find((n: PlantNode) => n.id === tr.nodeId);
+          if (node && !node.isJin && (node.type === "stem" || node.type === "meristem")) {
+            saveHistory();
+            const res = carveBranchToJin(win.state, tr.nodeId);
+            if (res.carved) {
+              win.state = res.state;
+              try { playJinSound(); } catch {}
+              checkSchoolsAndUnlocks("jin");
+            }
+          }
+        }
+      }
+    }
     draw();
   } else if (currentTool === "water") {
     updateWateringTarget(canvasX, canvasY);
@@ -834,6 +896,15 @@ canvas.addEventListener("pointermove", (e) => {
   }
 });
 
+canvas.addEventListener("pointerleave", () => {
+  const win = window as any;
+  if (win.state && (win.state.cursorWorldX !== undefined || win.state.cursorWorldY !== undefined)) {
+    win.state.cursorWorldX = undefined;
+    win.state.cursorWorldY = undefined;
+    draw();
+  }
+});
+
 canvas.addEventListener("pointerup", (e) => {
   if (dragging) {
     dragging = false;
@@ -851,6 +922,7 @@ canvas.addEventListener("pointerup", (e) => {
   }
 
   if (currentTool === "rake") {
+    currentRakeStroke = null;
     saveHistory();
     return;
   }
@@ -930,6 +1002,20 @@ canvas.addEventListener("pointerup", (e) => {
       }
     }
   } else if (currentTool === "wire" && activeWireNodeId !== null) {
+    if (pointerMovedDist < 8) {
+      // Tap without drag: unwrap/remove wire if already wired!
+      const hitNode = win.state.nodes.find((n: PlantNode) => n.id === activeWireNodeId);
+      if (hitNode && hitNode.hasWire) {
+        saveHistory();
+        const wireRes = removeWire(win.state, activeWireNodeId);
+        win.state = wireRes.state;
+        try { playWireSound(); } catch {}
+        draw();
+        checkSchoolsAndUnlocks("wire");
+        activeWireNodeId = null;
+        return;
+      }
+    }
     saveHistory();
     playWireSound();
     activeWireNodeId = null;
@@ -997,6 +1083,52 @@ $("btn-time-speed")?.addEventListener("click", (e) => {
   win.state.timeSpeed = nextSpeed;
   (e.currentTarget as HTMLElement).textContent = `⏳ ${nextSpeed}x`;
   draw();
+});
+
+// Foliage Translucency / X-Ray Toggle
+function toggleFoliageTransparency() {
+  getAudioContext();
+  const win = window as any;
+  if (!win.state) return;
+  win.state.foliageTransparent = !win.state.foliageTransparent;
+  const isTransparent = !!win.state.foliageTransparent;
+
+  const btnTop = $("btn-foliage-xray");
+  if (btnTop) {
+    btnTop.classList.toggle("active", isTransparent);
+    btnTop.textContent = isTransparent ? "👁️" : "🍃";
+    btnTop.title = isTransparent
+      ? "Laub-Transparenz aktiv (Skelettschau) [Taste X]"
+      : "Laub-Transparenz umschalten (Skelettschau) [Taste X]";
+  }
+
+  const btnDrawer = $("btn-xray");
+  if (btnDrawer) {
+    btnDrawer.textContent = isTransparent ? "Laub-Durchsicht: AN" : "Laub-Durchsicht: AUS";
+    btnDrawer.style.background = isTransparent ? "#0284c7" : "#1e293b";
+  }
+
+  try {
+    playDefoliateSound();
+  } catch {}
+
+  showAchievementToast(
+    isTransparent ? "👁️" : "🍃",
+    isTransparent ? "Skelettschau aktiviert" : "Skelettschau deaktiviert",
+    isTransparent
+      ? "Blätter und Blüten sind transparent — Astwerk, Drahtung und Totholz liegen frei."
+      : "Natürliche Dichte der Blätter und Blüten wiederhergestellt."
+  );
+
+  draw();
+}
+
+$("btn-foliage-xray")?.addEventListener("click", () => {
+  toggleFoliageTransparency();
+});
+
+$("btn-xray")?.addEventListener("click", () => {
+  toggleFoliageTransparency();
 });
 
 $("tool-shear")?.addEventListener("click", () => setTool("shear"));
@@ -1072,6 +1204,16 @@ $("modal-faq")?.addEventListener("click", (e) => {
 });
 
 window.addEventListener("keydown", (e) => {
+  const targetTag = (e.target as HTMLElement)?.tagName?.toUpperCase();
+  const isInput = targetTag === "INPUT" || targetTag === "TEXTAREA" || targetTag === "SELECT";
+  if (!isInput) {
+    if (e.key === "x" || e.key === "X") {
+      e.preventDefault();
+      toggleFoliageTransparency();
+      return;
+    }
+  }
+
   if (e.key === "Escape") {
     closeGalleryModal();
     closeFaqModal();
@@ -1391,38 +1533,33 @@ function animLoop(now: number) {
       wateringCan.pourProgress = Math.min(1.0, wateringCan.pourProgress + dt * 4.0);
       wateringCan.alpha = Math.min(1.0, wateringCan.alpha + dt * 5.0);
 
-      // Tilt forward towards ~0.65 rad (~37 degrees)
-      const targetTilt = 0.65;
+      // Tilt forward towards negative angle (~ -0.55 rad / ~ -32 deg) so spout dips DOWN to pot!
+      const targetTilt = -0.55;
       wateringCan.tiltAngle += (targetTilt - wateringCan.tiltAngle) * Math.min(1.0, dt * 7);
 
-      // Emit fine streaming water lines once tilted past threshold (>0.25 rad)
-      if (wateringCan.tiltAngle > 0.25) {
+      // Emit fine streaming water lines once tilted past threshold (>0.20 rad)
+      if (Math.abs(wateringCan.tiltAngle) > 0.20) {
         const rose = getCopperCanRosePosition(wateringCan);
-        const jetsToEmit = 4;
+        const jetsToEmit = 3;
         for (let j = 0; j < jetsToEmit; j++) {
-          const spread = (Math.random() - 0.5) * 0.35;
+          const spread = (Math.random() - 0.5) * 0.16;
           const jetAngle = rose.angle + spread;
-          const jetSpeed = 160 + Math.random() * 110;
+          const jetSpeed = 38 + Math.random() * 24; // gentle, low momentum (38-62 px/s)
           waterStreams.push({
-            x: rose.x + (Math.random() - 0.5) * 6,
-            y: rose.y + (Math.random() - 0.5) * 4,
+            x: rose.x + (Math.random() - 0.5) * 4,
+            y: rose.y + (Math.random() - 0.5) * 3,
             vx: Math.cos(jetAngle) * jetSpeed,
             vy: Math.sin(jetAngle) * jetSpeed,
-            len: 18 + Math.random() * 14,
+            len: 14 + Math.random() * 8,
             alpha: 0.95,
-            thickness: 1.1 + Math.random() * 0.35,
+            thickness: 0.85 + Math.random() * 0.3,
             seed: Math.random(),
           });
         }
 
-        // Nourish soil moisture in pot
+        // Nourish soil moisture in pot peacefully
         if (win.state) {
-          win.state.soilMoisture = Math.min(1.0, (win.state.soilMoisture ?? 0.5) + dt * 0.08);
-          // Subtle chance to stimulate growth burst
-          if (Math.random() < 0.08) {
-            win.state = growOnce(win.state, prng);
-            growthRedrawNeeded = true;
-          }
+          win.state.soilMoisture = Math.min(1.0, (win.state.soilMoisture ?? 0.5) + dt * 0.15);
         }
       }
     } else {
@@ -1431,7 +1568,7 @@ function animLoop(now: number) {
       wateringCan.pourProgress = Math.max(0, wateringCan.pourProgress - dt * 3.5);
       wateringCan.liftProgress = Math.max(0, wateringCan.liftProgress - dt * 3.0);
       wateringCan.alpha = Math.max(0, wateringCan.alpha - dt * 2.8);
-      if (wateringCan.alpha <= 0.02 && wateringCan.tiltAngle < 0.05) {
+      if (wateringCan.alpha <= 0.02 && Math.abs(wateringCan.tiltAngle) < 0.05) {
         wateringCan.active = false;
       }
     }
@@ -1440,7 +1577,7 @@ function animLoop(now: number) {
 
   // Update fine water stream lines
   if (waterStreams.length > 0) {
-    const gravity = 620;
+    const gravity = 320; // gentle, soft downward arc
     for (const s of waterStreams) {
       s.x += s.vx * dt;
       s.y += s.vy * dt;
@@ -1491,9 +1628,9 @@ function animLoop(now: number) {
   const currentGrowSpeed = (win.state?.growSpeed ?? 1.0) * timeMultiplier;
 
   if (playing && win.state && currentGrowSpeed > 0) {
-    // 1. Continuous smooth sub-pixel elongation of meristems and shoots
-    const elongationRate = 7.0 * currentGrowSpeed * dt;
-    const leafUnfurlRate = 1.8 * currentGrowSpeed * dt;
+    // 1. Continuous smooth sub-pixel elongation of meristems and shoots (gentle, contemplative)
+    const elongationRate = 0.75 * currentGrowSpeed * dt;
+    const organUnfurlRate = 0.08 * currentGrowSpeed * dt;
 
     for (const n of win.state.nodes) {
       if (!n.isCut && n.terminal && (n.type === "meristem" || n.type === "stem")) {
@@ -1502,15 +1639,15 @@ function animLoop(now: number) {
           growthRedrawNeeded = true;
         }
       }
-      // Smoothly unfurl leaves from bud scale to full leaf
-      if (n.type === "leaf" && (n.age ?? 0) < 5) {
-        n.age = Math.min(5, (n.age ?? 0) + leafUnfurlRate);
+      // Smoothly unfurl leaves and flowers continuously across 60 FPS frames (bud -> bloom)
+      if ((n.type === "leaf" || n.type === "flower") && (n.growthProgress ?? 1.0) < 1.0) {
+        n.growthProgress = Math.min(1.0, (n.growthProgress ?? 0.08) + organUnfurlRate);
         growthRedrawNeeded = true;
       }
     }
 
-    // 2. Developmental branching step cadence (calibrated by speed multiplier)
-    const stepInterval = Math.max(90, 480 / currentGrowSpeed);
+    // 2. Developmental branching step cadence (calibrated for serene, meditative observation)
+    const stepInterval = Math.max(500, 3200 / currentGrowSpeed);
     if (now - lastGrowTime > stepInterval) {
       lastGrowTime = now;
       if (autoHistoryCounter % 15 === 0) {

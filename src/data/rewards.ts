@@ -59,11 +59,8 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       secondaryColor: "#52525b",
     },
     description: "Gestaffelte Bergkämme, die im Morgennebel verblassen. Bringt zeitlose Tiefe und Ruhe in den Tokonoma-Raum.",
-    unlockCondition: "Kultiviere einen Baum im Shakan-Stil (Geneigter Stamm) oder beginne deine Bonsai-Reise.",
-    checkUnlocked: (state, report) => {
-      if (!report) return true; // Starter scroll
-      return report.scores.shakan.score >= 50 || (state.unlockedRewards?.includes("kakejiku_mountain_sansui") ?? true);
-    },
+    unlockCondition: "Starter-Hängerolle: Der zeitlose Begleiter für jeden neu gepflanzten Bonsai.",
+    checkUnlocked: () => true, // Default starter scroll
   },
   {
     id: "kakejiku_zen_enso",
@@ -81,12 +78,17 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       secondaryColor: "#18181b",
     },
     description: "Ein in einem einzigen Pinselstrich vollendeter Kreis des Meisters. Symbolisiert Leerheit, Erleuchtung und den Kreislauf allen Seins.",
-    unlockCondition: "Schnitze mindestens 2 Totholz-Partien (Jin & Shari) oder erreiche Jin-Shari Score ≥ 60.",
+    unlockCondition: "Meistere den Jin & Shari Stil mit Score ≥ 72, schnitze mindestens 3 Totholzpartien bei intakter Lebensader und mindestens 7 Astsegmenten.",
     checkUnlocked: (state, report) => {
-      const jinNodes = state.nodes.filter((n) => n.isJin);
-      if (jinNodes.length >= 2) return true;
-      if (report && report.scores["jin-shari"].score >= 60) return true;
-      return false;
+      if (!report) return false;
+      const stems = state.nodes.filter((n) => !n.isCut && (n.type === "stem" || n.type === "meristem"));
+      const jinCount = state.nodes.filter((n) => (n.isJin || n.isBroken) && !n.isCut).length;
+      return (
+        report.scores["jin-shari"].score >= 72 &&
+        jinCount >= 3 &&
+        report.metrics.hasContinuousLifeline &&
+        stems.length >= 7
+      );
     },
   },
   {
@@ -105,9 +107,15 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       secondaryColor: "#fef08a",
     },
     description: "Ein leuchtender Vollmond aus Blattgold vor tiefblauem Nachthimmel. Weckt die heitere Stille des Tsukimi-Festes.",
-    unlockCondition: "Erreiche die Schule Fukinagashi (Windgepeitscht) mit Score ≥ 65.",
+    unlockCondition: "Erreiche die Schule Fukinagashi (Windgepeitscht) mit Score ≥ 78, mindestens 7 Astsegmenten und über 78% Windflucht der Krone.",
     checkUnlocked: (_state, report) => {
-      return Boolean(report && report.scores.fukinagashi.score >= 65);
+      if (!report) return false;
+      return (
+        report.scores.fukinagashi.score >= 78 &&
+        report.metrics.windwardRatio >= 0.78 &&
+        report.metrics.stemCount >= 7 &&
+        (Math.abs(report.metrics.leanAngleDeg) >= 15 || report.metrics.apexOffsetRatio >= 0.20)
+      );
     },
   },
 
@@ -128,9 +136,14 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       secondaryColor: "#b45309",
     },
     description: "Handgegossene patinierte Bronze eines Anglers mit zarter Bambusrute. Beschwört die Einsamkeit eines stillen Gebirgsflusses herauf.",
-    unlockCondition: "Erreiche den Han-Kengai (Halbkaskade) Stil mit Score ≥ 65.",
+    unlockCondition: "Meistere die Halbkaskade (Han-Kengai) mit Score ≥ 74, mindestens 6 Astsegmenten und weitausladender Krone (Breite ≥ 80% der Höhe).",
     checkUnlocked: (_state, report) => {
-      return Boolean(report && report.scores["han-kengai"].score >= 65);
+      if (!report) return false;
+      return (
+        report.scores["han-kengai"].score >= 74 &&
+        report.metrics.stemCount >= 6 &&
+        report.metrics.width >= report.metrics.height * 0.80
+      );
     },
   },
   {
@@ -149,10 +162,18 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       secondaryColor: "#dc2626",
     },
     description: "Patinierter Mandschurenkranich aus Bronze; Symbol für Langlebigkeit, Treue und anmutige Erhabenheit.",
-    unlockCondition: "Meisterklasse: Erziele einen Chokkan- oder Moyogi-Score von ≥ 85 Punkten.",
+    unlockCondition: "Höchste Kokufu-ten Ehrung: Chokkan oder Moyogi mit Score ≥ 88, mindestens 10 Astsegmenten, Stammverjüngung ≥ 1.5 und 0 Fehlerästen.",
     checkUnlocked: (_state, report) => {
       if (!report) return false;
-      return report.scores.chokkan.score >= 85 || report.scores.moyogi.score >= 85;
+      const chokkanScore = report.scores.chokkan.score;
+      const moyogiScore = report.scores.moyogi.score;
+      const bestScore = Math.max(chokkanScore, moyogiScore);
+      return (
+        bestScore >= 88 &&
+        report.metrics.stemCount >= 10 &&
+        report.metrics.trunkTaper >= 1.5 &&
+        report.metrics.faultCount === 0
+      );
     },
   },
 
@@ -176,9 +197,14 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       particleType: "smoke",
     },
     description: "Blassgrünes Seladon-Räuchergefäß auf drei Füßen. Sendet einen sanft aufsteigenden Faden aus Agarholz-Rauch aus.",
-    unlockCondition: "Erziele in einer beliebigen klassischen Schule einen Reifegrad von Adept (Score ≥ 70).",
+    unlockCondition: "Erziele in einer klassischen Schule den Meister-Grad (Score ≥ 82), mindestens 8 Astsegmente und makellose Astarchitektur ohne Fehleräste (0 Imi-eda).",
     checkUnlocked: (_state, report) => {
-      return Boolean(report && report.dominantScore >= 70);
+      if (!report) return false;
+      return (
+        report.dominantScore >= 82 &&
+        report.metrics.stemCount >= 8 &&
+        report.metrics.faultCount === 0
+      );
     },
   },
 
@@ -199,9 +225,15 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       secondaryColor: "#78350f", // Kurotan hand-carved Daiza base
     },
     description: "Vom Flusswasser polierter Basaltstein des Kamo-Flusses auf passgenauem Palisander-Daiza. Stellt eine ferne Gebirgskette dar.",
-    unlockCondition: "Kultiviere einen literarischen Bunjingi-Baum mit Score ≥ 65.",
+    unlockCondition: "Forme einen reifen Literatenbonsai (Bunjingi) mit Score ≥ 76, Schlankheit ≥ 15:1, mindestens 6 Astsegmenten und kargem Unterstamm (≥ 65% kahl).",
     checkUnlocked: (_state, report) => {
-      return Boolean(report && report.scores.bunjingi.score >= 65);
+      if (!report) return false;
+      return (
+        report.scores.bunjingi.score >= 76 &&
+        report.metrics.slendernessRatio >= 15 &&
+        report.metrics.bareTrunkFraction >= 0.65 &&
+        report.metrics.stemCount >= 6
+      );
     },
   },
   {
@@ -221,9 +253,15 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       accentColor: "#78350f",
     },
     description: "Seltener Furuya-Stein mit senkrechter schneeweißer Quarzader, die wie ein tosender Wasserfall über schwarzen Fels stürzt.",
-    unlockCondition: "Kultiviere eine vollendete Vollkaskade (Kengai) mit Score ≥ 65.",
+    unlockCondition: "Vollende eine dramatische Kengai-Vollkaskade mit Score ≥ 80, mindestens 8 Astsegmenten und Kaskadenfall > 45px unter den Topfrand.",
     checkUnlocked: (_state, report) => {
-      return Boolean(report && report.scores.kengai.score >= 65);
+      if (!report) return false;
+      return (
+        report.scores.kengai.score >= 80 &&
+        report.metrics.lowestStemY > 45 &&
+        report.metrics.stemCount >= 8 &&
+        report.metrics.apexY < report.metrics.rootY
+      );
     },
   },
 
@@ -245,7 +283,7 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       accentColor: "#78350f",
     },
     description: "Mooskugel auf geschwärztem Zedernholzbrettchen. Verströmt feuchte, erdige Frische im Raum.",
-    unlockCondition: "Starter-Begleitpflanze oder Pflege mit Moospolstern.",
+    unlockCondition: "Starter-Begleitpflanze: Traditionelle Kokedama-Mooskugel für ein harmonisches Tokonoma-Arrangement.",
     checkUnlocked: () => true, // Starter accent
   },
   {
@@ -265,10 +303,17 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       accentColor: "#52525b",
     },
     description: "Zarte Frauenhaarfarn-Wedel vereint mit violetten Alpenveilchen in einer schlichten Schale aus Nanban-Ton.",
-    unlockCondition: "Bringe deinen Bonsai zur Blütezeit (mindestens 1 Blüte am Baum).",
+    unlockCondition: "Bringe deinen Bonsai im Frühling zur vollen Blüte (mindestens 3 reife Blüten im Frühlingszyklus, Baumalter ≥ 35).",
     checkUnlocked: (state) => {
-      const flowers = state.nodes.filter((n) => n.type === "flower" && !n.isCut);
-      return flowers.length >= 1;
+      if ((state.step || 0) < 35) return false;
+      const cycle = state.cycleLength || 250;
+      const seasonStep = state.step % cycle;
+      const isSpring = seasonStep <= 65 || seasonStep >= 235;
+      if (!isSpring) return false;
+      const matureFlowers = state.nodes.filter(
+        (n) => n.type === "flower" && !n.isCut && (n.growthProgress ?? 1.0) >= 0.75
+      );
+      return matureFlowers.length >= 3;
     },
   },
 
@@ -292,10 +337,15 @@ export const TOKONOMA_REWARD_CATALOG: TokonomaAccoutrement[] = [
       particleType: "glow",
     },
     description: "Aus Granit gemeißelte Schneebetrachtungs-Laterne mit breitem Schirmdach und Dreibeinfüßen, in der eine warme Flamme brennt.",
-    unlockCondition: "Pflege deinen Baum durch die winterliche Kälteperiode (Schritt 180+ im Zyklus).",
+    unlockCondition: "Pflege einen reifen Bonsai (mindestens 6 Astsegmente) durch die frostige Winterperiode (Schritt 180+ im Jahreszyklus bei intakter Bodenfeuchte).",
     checkUnlocked: (state) => {
-      const season = state.step % (state.cycleLength || 250);
-      return season >= 180;
+      const stems = state.nodes.filter((n) => !n.isCut && (n.type === "stem" || n.type === "meristem"));
+      if (stems.length < 6) return false;
+      if ((state.step || 0) < 180) return false;
+      const seasonStep = state.step % (state.cycleLength || 250);
+      const isWinter = seasonStep >= 180 && seasonStep <= 245;
+      const moistureOk = (state.soilMoisture ?? 0.5) >= 0.25;
+      return isWinter && moistureOk;
     },
   },
 ];

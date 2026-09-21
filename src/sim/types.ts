@@ -49,8 +49,15 @@ export interface PlantNode {
   breakAngle?: number;
   breakSplinters?: number[];
   callusStage?: number;
+  callusSwelling?: number;
+  wireAge?: number;
+  hasWireBite?: boolean;
+  wireBiteSeverity?: number;
   isJin?: boolean;
   jinStage?: number;
+  growthProgress?: number;
+  distalWeight?: number;
+  reactionWoodSag?: number;
 }
 
 export interface Genome {
@@ -178,6 +185,7 @@ export interface PlantState {
   isTokonoma?: boolean;
   timeSpeed?: number;
   sandFurrows?: Array<{ x: number; y: number; angle: number; width: number; depth: number }>;
+  sandStrokes?: Array<{ points: Array<{ x: number; y: number }>; width: number; intensity: number }>;
   sapDrops?: Array<{ x: number; y: number; size: number; alpha: number; vy: number }>;
   barkFlakes?: Array<{ x: number; y: number; vx: number; vy: number; rot: number; size: number; alpha: number }>;
   woodShavings?: Array<{ x: number; y: number; vx: number; vy: number; rot: number; size: number; alpha: number }>;
@@ -188,6 +196,9 @@ export interface PlantState {
   tokonomaParticles?: Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; size: number; alpha: number; type: "smoke" | "glow" }>;
   wateringCan?: WateringCanState;
   waterStreams?: WaterStreamJet[];
+  foliageTransparent?: boolean;
+  cursorWorldX?: number;
+  cursorWorldY?: number;
 }
 
 export interface WateringCanState {
@@ -196,10 +207,11 @@ export interface WateringCanState {
   y: number;
   targetX: number;
   targetY: number;
-  tiltAngle: number; // 0 (upright) to ~0.65 rad (~37°)
+  tiltAngle: number; // in rad
   pourProgress: number; // 0 (rest) to 1 (full pour)
   liftProgress: number; // 0 (hidden/rest) to 1 (raised above plant)
   alpha: number;
+  facingLeft?: boolean; // orient spout towards pot center
 }
 
 export interface WaterStreamJet {

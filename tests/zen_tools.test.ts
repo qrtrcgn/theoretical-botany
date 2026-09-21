@@ -17,6 +17,7 @@ import {
   swipeSliceCurvedStems,
   pluckLeavesAlongSwipe,
   bendStemWithWire,
+  removeWire,
   carveBranchToJin,
   swipeCarveCurvedStems,
   getNodeThickness,
@@ -29,6 +30,9 @@ import {
   getStemTransforms,
   renderBladeSlashTrail,
   renderWaterDroplets,
+  renderCopperWateringCan,
+  getCopperCanRosePosition,
+  renderWaterStreams,
   type SlashPoint,
   type WaterDroplet,
   type DevRenderOptions,
@@ -549,3 +553,274 @@ describe("Serene Canvas FX Renderers", () => {
     expect(() => renderWaterDroplets(mockCtx, droplets)).not.toThrow();
   });
 });
+
+describe("Bonsai Wiring Lifecycle, Callus Healing & Zen Courtyard Enhancements", () => {
+  it("removes wire with immediate springback (Modori) when unwrapped early", () => {
+    const prng = createPrng(88);
+    const sp = SPECIES[0];
+    const g = generateGenomeForSpecies(sp, 88);
+    let state = freshState(g, sp, { seed: 88 });
+    for (let i = 0; i < 20; i++) state = growOnce(state, prng);
+
+    const branch = state.nodes.find((n) => n.type === "stem" || n.type === "meristem")!;
+    expect(branch).toBeDefined();
+
+    // Bend branch with wire
+    const bent = bendStemWithWire(state, branch.id, 0.35);
+    const bentNode = bent.nodes.find((n) => n.id === branch.id)!;
+    expect(bentNode.hasWire).toBe(true);
+
+    // Immediate unwrapping (wireAge = 0) -> 100% Modori springback
+    const unwrapRes = removeWire(bent, branch.id);
+    expect(unwrapRes.info.removed).toBe(true);
+    expect(unwrapRes.info.springback).toBe(1.0);
+    const unwrappedNode = unwrapRes.state.nodes.find((n) => n.id === branch.id)!;
+    expect(unwrappedNode.hasWire).toBe(false);
+    expect(unwrappedNode.wireCurvature).toBe(0);
+  });
+
+  it("permanently sets branch bend after secondary wood lignification (wireAge >= 25)", () => {
+    const prng = createPrng(99);
+    const sp = SPECIES[0];
+    const g = generateGenomeForSpecies(sp, 99);
+    let state = freshState(g, sp, { seed: 99 });
+    for (let i = 0; i < 20; i++) state = growOnce(state, prng);
+
+    const branch = state.nodes.find((n) => n.type === "stem" || n.type === "meristem")!;
+    const bent = bendStemWithWire(state, branch.id, 0.3);
+    const initialBend = bent.nodes.find((n) => n.id === branch.id)!.wireCurvature!;
+
+    // Simulate 26 growth steps with wire on
+    let agedTree: PlantState = bent;
+    for (let i = 0; i < 26; i++) agedTree = growOnce(agedTree, prng);
+
+    const agedNode = agedTree.nodes.find((n) => n.id === branch.id)!;
+    expect(agedNode.wireAge).toBeGreaterThanOrEqual(25);
+
+    // Unwrap wire -> 0% springback, bend permanently set!
+    const unwrapRes = removeWire(agedTree, branch.id);
+    expect(unwrapRes.info.removed).toBe(true);
+    expect(unwrapRes.info.springback).toBe(0);
+    const setNode = unwrapRes.state.nodes.find((n) => n.id === branch.id)!;
+    expect(setNode.hasWire).toBe(false);
+    expect(setNode.wireCurvature).toBeCloseTo(initialBend, 2);
+  });
+
+  it("develops wire bite (Kikomi) when wire is left on past threshold (>35 steps)", () => {
+    const prng = createPrng(101);
+    const sp = SPECIES[0];
+    const g = generateGenomeForSpecies(sp, 101);
+    let state = freshState(g, sp, { seed: 101 });
+    for (let i = 0; i < 20; i++) state = growOnce(state, prng);
+
+    const branch = state.nodes.find((n) => n.type === "stem" || n.type === "meristem")!;
+    let wiredTree: PlantState = bendStemWithWire(state, branch.id, 0.3);
+
+    // Grow 38 steps
+    for (let i = 0; i < 38; i++) wiredTree = growOnce(wiredTree, prng);
+
+    const bittenNode = wiredTree.nodes.find((n) => n.id === branch.id)!;
+    expect(bittenNode.hasWireBite).toBe(true);
+    expect(bittenNode.wireBiteSeverity).toBeGreaterThan(0);
+  });
+
+  it("progressively heals pruned wounds with callus roll (Maki-komi) and forms wooden knob (Kobu)", () => {
+    const prng = createPrng(102);
+    const sp = SPECIES[0];
+    const g = generateGenomeForSpecies(sp, 102);
+    let tree = freshState(g, sp, { seed: 102 });
+    for (let i = 0; i < 30; i++) tree = growOnce(tree, prng);
+
+    const target = tree.nodes.find((n) => (n.type === "stem" || n.type === "meristem") && n.length > 5)!;
+    expect(target).toBeDefined();
+
+    // Fresh cut
+    const cutTree = pruneNodeAt(tree, target.id, 0.5);
+    const cutNode = cutTree.nodes.find((n) => n.id === target.id)!;
+    expect(cutNode.isCut).toBe(true);
+    expect(cutNode.callusStage).toBe(0);
+
+    // Run 30 growth steps with moist soil
+    let healingTree = cutTree;
+    healingTree.soilMoisture = 0.9;
+    for (let i = 0; i < 30; i++) healingTree = growOnce(healingTree, prng);
+
+    const healedNode = healingTree.nodes.find((n) => n.id === target.id)!;
+    expect(healedNode.callusStage).toBeGreaterThan(0.4);
+    expect(healedNode.callusSwelling).toBeGreaterThan(0.4);
+  });
+
+  it("calculates copper can rose head position for left and right orientations", () => {
+    const canLeft = {
+      active: true,
+      x: 150,
+      y: 120,
+      targetX: 150,
+      targetY: 120,
+      tiltAngle: -0.55,
+      pourProgress: 1,
+      liftProgress: 1,
+      alpha: 1,
+      facingLeft: true,
+    };
+    const roseLeft = getCopperCanRosePosition(canLeft);
+    expect(roseLeft.x).toBeLessThan(canLeft.x); // rose is to the left of can center
+    expect(Number.isFinite(roseLeft.y)).toBe(true);
+
+    const canRight = {
+      ...canLeft,
+      facingLeft: false,
+    };
+    const roseRight = getCopperCanRosePosition(canRight);
+    expect(roseRight.x).toBeGreaterThan(canRight.x); // rose is to the right of can center
+  });
+
+  it("renders multi-pronged Karesansui sand strokes and copper can without throwing", () => {
+    const mockCtx = createMockCanvasContext();
+    const sp = SPECIES[0];
+    const g = generateGenomeForSpecies(sp, 103);
+    let state = freshState(g, sp, { seed: 103 });
+
+    state.sandStrokes = [
+      {
+        points: [
+          { x: -100, y: 40 },
+          { x: -50, y: 45 },
+          { x: 0, y: 50 },
+          { x: 80, y: 55 },
+        ],
+        width: 18,
+        intensity: 1.0,
+      },
+    ];
+
+    expect(() => renderPlant(mockCtx, state, 600, 700)).not.toThrow();
+
+    const can = {
+      active: true,
+      x: 200,
+      y: 150,
+      targetX: 200,
+      targetY: 150,
+      tiltAngle: -0.45,
+      pourProgress: 0.8,
+      liftProgress: 1,
+      alpha: 0.9,
+      facingLeft: true,
+    };
+    expect(() => renderCopperWateringCan(mockCtx, can)).not.toThrow();
+
+    const streams = [
+      { x: 180, y: 160, vx: -20, vy: 45, len: 12, alpha: 0.9, thickness: 1.0, seed: 0.5 },
+    ];
+    expect(() => renderWaterStreams(mockCtx, streams)).not.toThrow();
+  });
+
+  it("advances leaf and flower growthProgress gradually from bud stage to full bloom", () => {
+    const prng = createPrng(303);
+    const sp = SPECIES[0];
+    const g = generateGenomeForSpecies(sp, 303);
+    let state = freshState(g, sp, { seed: 303 });
+
+    // Grow 40 steps to spawn foliage
+    for (let i = 0; i < 40; i++) state = growOnce(state, prng);
+
+    const leaves = state.nodes.filter((n) => n.type === "leaf");
+    expect(leaves.length).toBeGreaterThan(0);
+
+    // Verify all leaves have valid growthProgress >= 0.08 and <= 1.0
+    for (const leaf of leaves) {
+      expect(leaf.growthProgress).toBeDefined();
+      expect(leaf.growthProgress!).toBeGreaterThanOrEqual(0.08);
+      expect(leaf.growthProgress!).toBeLessThanOrEqual(1.0);
+    }
+
+    // Capture initial progress of oldest leaf
+    const firstLeaf = leaves[0];
+    const initialProgress = firstLeaf.growthProgress!;
+
+    // Run additional steps with water
+    state.soilMoisture = 0.9;
+    for (let i = 0; i < 15; i++) state = growOnce(state, prng);
+
+    const updatedLeaf = state.nodes.find((n) => n.id === firstLeaf.id)!;
+    expect(updatedLeaf.growthProgress!).toBeGreaterThanOrEqual(initialProgress);
+  });
+
+  it("calculates distal foliage weight and applies subtle reaction wood deflection", () => {
+    const prng = createPrng(404);
+    const sp = SPECIES[1]; // Acer Palmatum
+    const g = generateGenomeForSpecies(sp, 404);
+    let state = freshState(g, sp, { seed: 404 });
+
+    // Grow tree to establish branching
+    for (let i = 0; i < 45; i++) state = growOnce(state, prng);
+
+    const stems = state.nodes.filter((n) => n.type === "stem" || n.type === "meristem");
+    expect(stems.length).toBeGreaterThan(1);
+
+    // Verify distal weight and subtle reaction sag
+    for (const stem of stems) {
+      expect(stem.distalWeight).toBeDefined();
+      expect(stem.distalWeight!).toBeGreaterThanOrEqual(0);
+      expect(stem.reactionWoodSag).toBeDefined();
+      // Reaction wood sag must be gentle ("nur seicht", clamped <= 0.12 rad approx 6.8 deg)
+      expect(Math.abs(stem.reactionWoodSag!)).toBeLessThanOrEqual(0.12);
+    }
+
+    // Root node must bear accumulated distal weight of its descendants
+    const root = state.nodes.find((n) => n.id === 0)!;
+    expect(root.distalWeight!).toBeGreaterThan(0.05);
+  });
+
+  it("renders all botanical leaf and flower morphologies across all developmental stages without throwing", () => {
+    const { drawModularLeaf, drawModularFlower } = require("../src/render/morphology");
+    const mockCtx = createMockCanvasContext();
+
+    const leafShapes = ["needle", "scale", "palmate", "lanceolate", "serrate", "pinnate", "lobed", "simple"];
+    const flowerShapes = ["sakura", "ume", "azalea", "solitary", "umbel", "compound"];
+    const stages = [0.1, 0.35, 0.65, 1.0]; // Bud, unfurling/swelling, bloom, mature
+
+    for (const ls of leafShapes) {
+      for (const p of stages) {
+        expect(() => drawModularLeaf(mockCtx, ls, 14, "#15803d", "#86efac", p)).not.toThrow();
+      }
+    }
+
+    for (const fs of flowerShapes) {
+      for (const p of stages) {
+        expect(() => drawModularFlower(mockCtx, fs, 5, 10, "#f43f5e", "#facc15", p)).not.toThrow();
+      }
+    }
+  });
+
+  it("renders foliage with toggleable translucency (X-Ray) and proximity hover fading without throwing", () => {
+    const mockCtx = createMockCanvasContext();
+    const sp = SPECIES[0];
+    const g = generateGenomeForSpecies(sp, 204);
+    let state = freshState(g, sp, { seed: 204 });
+    const prng = createPrng(204);
+    for (let i = 0; i < 25; i++) {
+      state = growOnce(state, prng);
+    }
+
+    // 1. Standard rendering
+    expect(() => renderPlant(mockCtx, state, 600, 700)).not.toThrow();
+
+    // 2. Toggled X-Ray Skelettschau (foliageTransparent = true)
+    state.foliageTransparent = true;
+    expect(() => renderPlant(mockCtx, state, 600, 700)).not.toThrow();
+
+    // 3. Proximity hover fading (cursorWorldX / cursorWorldY active)
+    state.foliageTransparent = false;
+    state.cursorWorldX = 10;
+    state.cursorWorldY = -50;
+    expect(() => renderPlant(mockCtx, state, 600, 700)).not.toThrow();
+
+    // 4. Cursor distant from tree
+    state.cursorWorldX = 999;
+    state.cursorWorldY = 999;
+    expect(() => renderPlant(mockCtx, state, 600, 700)).not.toThrow();
+  });
+});
+

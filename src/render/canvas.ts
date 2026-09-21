@@ -722,10 +722,10 @@ export function renderPlant(
     const grooveColor = state.darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
     const grooveShadow = state.darkMode ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.65)";
 
-  // Outer wooden sand tray rim (wide panoramic terrace with mitered joinery)
+  // Outer wooden sand tray rim (wide panoramic terrace with mitered joinery stretching deep in perspective)
   ctx.fillStyle = state.darkMode ? "#0b0f17" : "#544537";
   ctx.beginPath();
-  safeRoundRect(ctx, -420, 14, 840, 96, [12]);
+  safeRoundRect(ctx, -440, -68, 880, 224, [14]);
   ctx.fill();
 
   // Subtle dark bevel and cast shadow for depth
@@ -736,24 +736,76 @@ export function renderPlant(
   // Fine granite gravel sand bed
   ctx.fillStyle = sandBg;
   ctx.beginPath();
-  safeRoundRect(ctx, -414, 17, 828, 90, [10]);
+  safeRoundRect(ctx, -434, -64, 868, 216, [10]);
   ctx.fill();
 
   // Meditative combed horizontal sand grooves across wide courtyard
-  for (let gy = 23; gy <= 101; gy += 6) {
+  for (let gy = -56; gy <= 144; gy += 7) {
     ctx.strokeStyle = grooveColor;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
-    ctx.moveTo(-406, gy);
-    ctx.lineTo(406, gy);
+    ctx.moveTo(-424, gy);
+    ctx.lineTo(424, gy);
     ctx.stroke();
 
     ctx.strokeStyle = grooveShadow;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(-406, gy + 1);
-    ctx.lineTo(406, gy + 1);
+    ctx.moveTo(-424, gy + 1);
+    ctx.lineTo(424, gy + 1);
     ctx.stroke();
+  }
+
+  // Render continuous multi-pronged raked sand furrows (Samon 砂紋 / Berge & Täler)
+  if (state.sandStrokes && state.sandStrokes.length > 0) {
+    for (const stroke of state.sandStrokes) {
+      if (!stroke.points || stroke.points.length < 2) continue;
+      const pts = stroke.points;
+      const tines = [-9, -3, 3, 9]; // 4-tined wooden Kumade rake
+
+      for (const tineOffset of tines) {
+        ctx.save();
+        const tinePts: Array<{ x: number; y: number }> = [];
+        for (let p = 0; p < pts.length; p++) {
+          const cur = pts[p];
+          const prev = pts[Math.max(0, p - 1)];
+          const next = pts[Math.min(pts.length - 1, p + 1)];
+          const dx = next.x - prev.x;
+          const dy = next.y - prev.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = -dy / len;
+          const ny = dx / len;
+          tinePts.push({
+            x: cur.x + nx * tineOffset,
+            y: cur.y + ny * tineOffset,
+          });
+        }
+
+        // 1. Trough (Tal): Shadowed groove depression
+        ctx.strokeStyle = state.darkMode ? "rgba(0, 0, 0, 0.65)" : "rgba(45, 30, 18, 0.42)";
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(tinePts[0].x, tinePts[0].y);
+        for (let p = 1; p < tinePts.length; p++) {
+          ctx.lineTo(tinePts[p].x, tinePts[p].y);
+        }
+        ctx.stroke();
+
+        // 2. Sunward Crest (Berg): Bright berm highlight catching ambient light on top edge
+        ctx.strokeStyle = state.darkMode ? "rgba(255, 255, 255, 0.35)" : "rgba(255, 255, 255, 0.85)";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(tinePts[0].x - 0.7, tinePts[0].y - 1.0);
+        for (let p = 1; p < tinePts.length; p++) {
+          ctx.lineTo(tinePts[p].x - 0.7, tinePts[p].y - 1.0);
+        }
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
   }
 
   // Render user-raked sand ripples with tactile 3D relief (Berge & Täler)
@@ -1125,17 +1177,35 @@ export function renderPlant(
     }
     const kids = childrenByParent.get(n.id) ?? [];
     const childStems = kids.filter((c) => c.type === "stem" || c.type === "meristem");
-    let areaSum = 0.9; // Base tip area
-    for (const c of childStems) {
-      const ct = getThickness(c);
-      areaSum += ct * ct;
+
+    let thick: number;
+    if (childStems.length === 0) {
+      // Terminal shoot or meristem tip: delicate, crisp, fine
+      const wood = Math.min(1.0, (n.age || 0) / 90);
+      thick = (n.type === "meristem" ? 1.05 : 1.25) + wood * 0.35;
+    } else if (childStems.length === 1) {
+      // Continuation segment along same branch axis: gentle taper
+      const ct = getThickness(childStems[0]);
+      thick = ct + 0.16;
+    } else {
+      // Branching junction: Murray's Law (p = 2.4)
+      let sumP = 0;
+      for (const c of childStems) {
+        const ct = getThickness(c);
+        sumP += Math.pow(ct, 2.4);
+      }
+      thick = Math.pow(sumP, 1 / 2.4) + 0.22;
     }
-    const daVinci = Math.sqrt(areaSum);
-    const woodiness = Math.min(1.0, (n.age || 0) / 45);
-    const depthFactor = Math.max(0.35, 1.0 - (n.depth / 8) * 0.45);
-    const thickness = Math.max(1.2, daVinci * 1.3 * depthFactor + woodiness * 1.8);
-    thicknessCache.set(n.id, thickness);
-    return thickness;
+
+    // Basal root flare (Nebari) at the lower trunk (depth 0 and 1)
+    if (n.depth === 0) {
+      thick += 3.8;
+    } else if (n.depth === 1) {
+      thick += 2.0;
+    }
+
+    thicknessCache.set(n.id, thick);
+    return thick;
   }
 
   // Precompute weights and thickness
@@ -1192,14 +1262,15 @@ export function renderPlant(
       const sagDistance = droop * length;
       const bendAngle = thickness < 2.5 ? droop * 0.4 : 0;
 
-      // Bonsai wire internode curvature bending:
+      // Bonsai wire internode curvature bending & subtle reaction wood sag:
       // Joint origin startAngle is rigidly preserved!
       // Wire curves the internode body towards the exit angle.
       const wireBend = n.wireCurvature ?? n.wireAngleOffset ?? 0;
-      const renderAngle = startAngle + wireBend + bendAngle;
+      const reactionSag = n.reactionWoodSag ?? 0;
+      const renderAngle = startAngle + wireBend + bendAngle + reactionSag;
 
       // Tip position along the curved arc
-      const chordAngle = startAngle + wireBend * 0.5 + bendAngle;
+      const chordAngle = startAngle + wireBend * 0.5 + bendAngle + reactionSag * 0.5;
       const endX = startX + Math.cos(chordAngle) * length;
       const endY = startY + Math.sin(chordAngle) * length;
 
@@ -1211,7 +1282,7 @@ export function renderPlant(
       const organicSweep = ((n.id % 7) - 3) * 0.015;
       const curvatureOffset = wireBend * length * 0.28;
       const controlX = midX + normalX * (organicSweep * length + curvatureOffset);
-      const controlY = midY + normalY * (organicSweep * length + curvatureOffset) + sagDistance * 0.35;
+      const controlY = midY + normalY * (organicSweep * length + curvatureOffset) + (sagDistance + Math.abs(reactionSag) * length * 0.3) * 0.35;
 
       const tr: StemTransform = {
         nodeId: n.id,
@@ -1280,6 +1351,14 @@ export function renderPlant(
         if (state.woodTexture !== false) {
           renderWoodBarkTexture(ctx, startX, startY, endX, endY, thickness, wood, controlX, controlY);
         }
+        // Branch Bark Collar (Astkragen / 枝襟): Soft organic joint collar blending branch into parent
+        if (n.parentId !== null && !n.isCut) {
+          const collarR = Math.max(1.8, thickness * 0.62);
+          ctx.fillStyle = `rgb(${r},${gr},${b})`;
+          ctx.beginPath();
+          ctx.arc(startX, startY, collarR, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       // Pristine winter snow crust on top of gently sloping/horizontal branches
@@ -1317,6 +1396,33 @@ export function renderPlant(
           ctx.beginPath();
           ctx.moveTo(pt.x - nx * halfW - (tx / tLen) * 1.5, pt.y - ny * halfW - (ty / tLen) * 1.5);
           ctx.lineTo(pt.x + nx * halfW + (tx / tLen) * 1.5, pt.y + ny * halfW + (ty / tLen) * 1.5);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // Wire bite scars (Kikomi 食い込み) from prolonged wire constriction
+      if (n.hasWireBite && !n.isJin) {
+        ctx.save();
+        const severity = n.wireBiteSeverity ?? 0.6;
+        ctx.strokeStyle = state.darkMode ? "rgba(0, 0, 0, 0.75)" : "rgba(35, 18, 8, 0.75)";
+        ctx.lineWidth = Math.max(1.0, thickness * 0.28 * severity);
+        ctx.lineCap = "round";
+        const coils = Math.max(3, Math.floor(length / 7));
+        for (let i = 1; i <= coils; i++) {
+          const t = i / (coils + 1);
+          const pt = quadBezierPoint(startX, startY, controlX, controlY, endX, endY, t);
+          const mt = 1 - t;
+          const tx = 2 * mt * (controlX - startX) + 2 * t * (endX - controlX);
+          const ty = 2 * mt * (controlY - startY) + 2 * t * (endY - controlY);
+          const tLen = Math.hypot(tx, ty) || 1;
+          const nx = -ty / tLen;
+          const ny = tx / tLen;
+          const halfW = (thickness / 2) * 0.85;
+
+          ctx.beginPath();
+          ctx.moveTo(pt.x - nx * halfW - (tx / tLen) * 1.2, pt.y - ny * halfW - (ty / tLen) * 1.2);
+          ctx.lineTo(pt.x + nx * halfW + (tx / tLen) * 1.2, pt.y + ny * halfW + (ty / tLen) * 1.2);
           ctx.stroke();
         }
         ctx.restore();
@@ -1386,21 +1492,85 @@ export function renderPlant(
           ctx.arc(endX + bDirX * 1.2, endY + bDirY * 1.2, Math.max(1.5, thickness * 0.35), 0, Math.PI * 2);
           ctx.fill();
         } else {
-          // Clean Shears Cut: Smooth cambium ring & heartwood core
-          const callus = n.callusStage ?? 0.3;
-          ctx.fillStyle = "#65a30d"; // green cambium
-          ctx.beginPath();
-          ctx.arc(endX, endY, Math.max(2.4, thickness * 0.65 + callus * 1.5), 0, Math.PI * 2);
-          ctx.fill();
+          // Clean Shears Cut: Progressive Wound Closure & Swollen Callus Knob (Maki-komi 巻き込み & Kobu 瘤)
+          const callus = Math.max(0, Math.min(1.0, n.callusStage ?? 0));
+          const swelling = Math.max(0, Math.min(1.0, n.callusSwelling ?? 0));
 
-          ctx.fillStyle = "#e2d9cc"; // smooth heartwood core
-          ctx.beginPath();
-          ctx.arc(endX, endY, Math.max(1.2, thickness * 0.4 * (1 - callus * 0.35)), 0, Math.PI * 2);
-          ctx.fill();
+          if (callus >= 0.75) {
+            // Stage 3: Fully Matured Callus Knob (Kobu) — completely sealed, swollen wooden knob with bark texture
+            const knobRadius = Math.max(2.8, thickness * 0.75 + swelling * 2.8);
+            
+            // Outer swollen wooden collar blending with bark
+            ctx.fillStyle = `rgb(${r},${gr},${b})`;
+            ctx.beginPath();
+            ctx.arc(endX, endY, knobRadius, 0, Math.PI * 2);
+            ctx.fill();
 
-          ctx.strokeStyle = "#78350f";
-          ctx.lineWidth = 1;
-          ctx.stroke();
+            // Concentric healing bark folds
+            ctx.strokeStyle = state.darkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(45, 25, 12, 0.4)";
+            ctx.lineWidth = 1.0;
+            ctx.beginPath();
+            ctx.arc(endX, endY, knobRadius * 0.65, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Central sealed navel / fissure
+            ctx.strokeStyle = state.darkMode ? "rgba(0, 0, 0, 0.6)" : "rgba(35, 18, 8, 0.7)";
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(endX - knobRadius * 0.25, endY);
+            ctx.lineTo(endX + knobRadius * 0.25, endY);
+            ctx.stroke();
+          } else if (callus >= 0.25) {
+            // Stage 2: Active Inward Rolling Cambium (Maki-komi)
+            const collarRadius = Math.max(2.4, thickness * 0.65 + swelling * 1.8);
+            const coreRadius = Math.max(0.6, thickness * 0.4 * (1.0 - callus * 0.8));
+
+            // Outer swelling wooden callus roll
+            ctx.fillStyle = `rgb(${Math.round(r * 0.85 + 40)},${Math.round(gr * 0.85 + 50)},${b})`;
+            ctx.beginPath();
+            ctx.arc(endX, endY, collarRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Rolling green cambium ring
+            ctx.fillStyle = "#65a30d";
+            ctx.beginPath();
+            ctx.arc(endX, endY, collarRadius * 0.72, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Shrinking pale heartwood core
+            ctx.fillStyle = "#e2d9cc";
+            ctx.beginPath();
+            ctx.arc(endX, endY, coreRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = "#78350f";
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+          } else {
+            // Stage 1: Fresh Clean Shears Cut — vivid green cambium & exposed pale sapwood
+            const collarRadius = Math.max(2.0, thickness * 0.58);
+            const coreRadius = Math.max(1.1, thickness * 0.38);
+
+            ctx.fillStyle = "#65a30d"; // vivid cambium ring
+            ctx.beginPath();
+            ctx.arc(endX, endY, collarRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#fef08a"; // fresh pale wood core
+            ctx.beginPath();
+            ctx.arc(endX, endY, coreRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = "#854d0e";
+            ctx.lineWidth = 0.9;
+            ctx.stroke();
+
+            // Weeping sap drop if fresh cut
+            ctx.fillStyle = "rgba(245, 158, 11, 0.85)";
+            ctx.beginPath();
+            ctx.arc(endX + 0.5, endY + 0.5, Math.max(1.0, thickness * 0.22), 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
         ctx.restore();
       }
@@ -1431,13 +1601,31 @@ export function renderPlant(
   }
 
   // 5. Render Multi-Morphology Leaves & Flowers Attached Precisely to Curved Branches
-  const leafTypes = ["simple", "palmate", "pinnate", "lobed", "needle"] as const;
-  const flowerTypes = ["solitary", "raceme", "umbel", "panicle", "compound"] as const;
+  const leafTypes = [
+    "simple",
+    "palmate",
+    "pinnate",
+    "lobed",
+    "needle",
+    "scale",
+    "lanceolate",
+    "serrate",
+  ] as const;
+  const flowerTypes = [
+    "solitary",
+    "sakura",
+    "ume",
+    "azalea",
+    "raceme",
+    "umbel",
+    "panicle",
+    "compound",
+  ] as const;
 
   const leafTrait = expressTrait(g, "leafShape") || 0;
   const selectedLeafMorphology = leafTypes[Math.abs(leafTrait) % leafTypes.length];
 
-  const inflorescenceTrait = expressTrait(g, "inflorescence");
+  const inflorescenceTrait = expressTrait(g, "inflorescence") || 0;
   const selectedFlowerMorphology = flowerTypes[Math.abs(inflorescenceTrait) % flowerTypes.length];
 
   const flowerRGB = expressTrait(g, "flowerRGB") || [236, 72, 153];
@@ -1468,10 +1656,26 @@ export function renderPlant(
       }
 
       ctx.save();
-      const maturity = Math.min(1.0, (n.age ?? 1) / 5.0);
+      const progress = n.growthProgress ?? Math.min(1.0, (n.age ?? 1) / 20.0);
       ctx.translate(leafX, leafY);
       ctx.rotate(leafAngle);
-      ctx.scale(maturity, maturity);
+
+      // Ethereal Komorebi leaf translucency for layered foliage depth & interactive hover/toggle X-Ray
+      const defaultAlpha = (selectedLeafMorphology === "needle" || selectedLeafMorphology === "scale") ? 0.85 : 0.78;
+      let leafAlpha = defaultAlpha;
+
+      if (state.foliageTransparent) {
+        // Toggled X-Ray / Skelettschau mode: reveal branch architecture and wiring
+        leafAlpha = 0.22;
+      } else if (state.cursorWorldX !== undefined && state.cursorWorldY !== undefined) {
+        // Interactive proximity hover: leaves under or near cursor fade to transparent
+        const d = Math.hypot(leafX - state.cursorWorldX, leafY - state.cursorWorldY);
+        if (d < 75) {
+          const proximity = d / 75.0; // 0 at cursor center, 1 at 75px
+          leafAlpha = Math.min(defaultAlpha, 0.20 + (defaultAlpha - 0.20) * proximity);
+        }
+      }
+      ctx.globalAlpha = leafAlpha;
 
       const leafHueOffset = (Math.abs(n.id * 17) % 25) - 12;
       const currentHue = (baseHue + leafHueOffset + 360) % 360;
@@ -1484,6 +1688,7 @@ export function renderPlant(
 
       const isEvergreen =
         selectedLeafMorphology === "needle" ||
+        selectedLeafMorphology === "scale" ||
         state.speciesId === "pinus-thunbergii" ||
         state.speciesId === "bunjingi-pine" ||
         state.speciesId === "kengai-cascade";
@@ -1507,7 +1712,7 @@ export function renderPlant(
       const activeBase = `hsl(${effectiveHue}, ${sat}%, ${lightBase}%)`;
       const activeTip = `hsl(${effectiveHue}, ${sat + 8}%, ${lightTip}%)`;
 
-      drawModularLeaf(ctx, selectedLeafMorphology, 14, activeBase, activeTip);
+      drawModularLeaf(ctx, selectedLeafMorphology, 14, activeBase, activeTip, progress);
       ctx.restore();
     } else if (n.type === "flower") {
       const parentTr = n.parentId !== null ? globalStemTransforms.get(n.parentId) : undefined;
@@ -1527,12 +1732,28 @@ export function renderPlant(
       ctx.save();
       ctx.translate(flowerX, flowerY);
 
+      // Interactive blossom translucency (toggleable X-Ray / proximity hover)
+      const defaultFlowerAlpha = 0.95;
+      let flowerAlpha = defaultFlowerAlpha;
+
+      if (state.foliageTransparent) {
+        flowerAlpha = 0.24;
+      } else if (state.cursorWorldX !== undefined && state.cursorWorldY !== undefined) {
+        const d = Math.hypot(flowerX - state.cursorWorldX, flowerY - state.cursorWorldY);
+        if (d < 75) {
+          const proximity = d / 75.0;
+          flowerAlpha = Math.min(defaultFlowerAlpha, 0.22 + (defaultFlowerAlpha - 0.22) * proximity);
+        }
+      }
+      ctx.globalAlpha = flowerAlpha;
+
+      const progress = n.growthProgress ?? Math.min(1.0, (n.age ?? 1) / 25.0);
       const isPolyploid = Math.abs(n.id * 13) % 11 === 0;
-      const flowerScale = isPolyploid ? 1.4 : 1.0;
+      const flowerScale = isPolyploid ? 1.3 : 1.0;
       ctx.scale(flowerScale, flowerScale);
 
       const petalCount = expressTrait(g, "petalCount") || 5;
-      drawModularFlower(ctx, selectedFlowerMorphology, petalCount + (isPolyploid ? 2 : 0), 10, basePetalColor, "#facc15");
+      drawModularFlower(ctx, selectedFlowerMorphology, petalCount + (isPolyploid ? 2 : 0), 10, basePetalColor, "#facc15", progress);
       ctx.restore();
     } else if (n.type === "bud") {
       const parentTr = n.parentId !== null ? globalStemTransforms.get(n.parentId) : undefined;
@@ -1696,24 +1917,26 @@ export function renderWaterDroplets(
  * Calculates world coordinates of the brass rose head (Hasuguchi) of the copper watering can.
  */
 export function getCopperCanRosePosition(can: WateringCanState): { x: number; y: number; angle: number } {
+  const facingLeft = can.facingLeft !== false;
   const cosT = Math.cos(can.tiltAngle);
   const sinT = Math.sin(can.tiltAngle);
-  // Spout tip relative to can center at rest: (-44, -22)
-  const localX = -44;
+  // Spout tip relative to can center at rest: (-44, -22) if facing left, (+44, -22) if facing right
+  const localX = facingLeft ? -44 : 44;
   const localY = -22;
   const worldX = can.x + (localX * cosT - localY * sinT);
   const worldY = can.y + (localX * sinT + localY * cosT);
+  const baseAngle = facingLeft ? (Math.PI * 0.68) : (Math.PI * 0.32);
   return {
     x: worldX,
     y: worldY,
-    angle: -Math.PI * 0.62 + can.tiltAngle,
+    angle: baseAngle + (facingLeft ? -can.tiltAngle * 0.5 : can.tiltAngle * 0.5),
   };
 }
 
 /**
  * Procedurally renders an authentic Japanese copper bonsai watering can (Dō-sei Jōro / 銅製じょうろ).
  * Features a slender gooseneck spout, perforated brass rose (Hasuguchi), overhead arch handle,
- * rear tipping grip, and dynamic lift/tilt animation.
+ * rear tipping grip, and dynamic lift/tilt animation with pot-centric orientation.
  */
 export function renderCopperWateringCan(
   ctx: CanvasRenderingContext2D,
@@ -1732,8 +1955,12 @@ export function renderCopperWateringCan(
   ctx.ellipse(can.x - 6, shadowY, 30 * shadowScale, 7 * shadowScale, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Position and tilt the can smoothly
+  // Position, flip toward pot center if needed, and tilt the can smoothly
   ctx.translate(can.x, can.y);
+  const facingLeft = can.facingLeft !== false;
+  if (!facingLeft) {
+    ctx.scale(-1, 1);
+  }
   ctx.rotate(can.tiltAngle);
 
   // 1. Rear tipping grip handle
@@ -1886,23 +2113,23 @@ export function renderWaterStreams(
     const speed = Math.hypot(s.vx, s.vy);
     if (speed < 0.1) continue;
 
-    const tailLen = Math.min(s.len, speed * 0.12);
+    const tailLen = Math.min(s.len, Math.max(7, speed * 0.22));
     const tailX = s.x - (s.vx / speed) * tailLen;
     const tailY = s.y - (s.vy / speed) * tailLen;
 
-    // Outer translucent azure stream jet line
-    ctx.strokeStyle = `rgba(186, 230, 253, ${s.alpha * 0.78})`;
-    ctx.lineWidth = s.thickness || 1.2;
+    // Translucent soft azure water thread
+    ctx.strokeStyle = `rgba(186, 230, 253, ${s.alpha * 0.72})`;
+    ctx.lineWidth = s.thickness || 0.95;
     ctx.beginPath();
     ctx.moveTo(tailX, tailY);
     ctx.lineTo(s.x, s.y);
     ctx.stroke();
 
-    // Inner bright specular core
-    ctx.strokeStyle = `rgba(255, 255, 255, ${s.alpha * 0.95})`;
-    ctx.lineWidth = Math.max(0.6, (s.thickness || 1.2) * 0.45);
+    // Delicate glistening core
+    ctx.strokeStyle = `rgba(255, 255, 255, ${s.alpha * 0.88})`;
+    ctx.lineWidth = Math.max(0.45, (s.thickness || 0.95) * 0.38);
     ctx.beginPath();
-    ctx.moveTo(tailX + (s.x - tailX) * 0.35, tailY + (s.y - tailY) * 0.35);
+    ctx.moveTo(tailX + (s.x - tailX) * 0.45, tailY + (s.y - tailY) * 0.45);
     ctx.lineTo(s.x, s.y);
     ctx.stroke();
   }
