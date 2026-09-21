@@ -4922,23 +4922,23 @@ function stopBreatheMode() {
     circle.classList.remove("expanding", "contracting");
   setTool("shear");
 }
-var history = [];
+var undoHistoryStack = [];
 var MAX_HISTORY = 80;
 function saveHistory() {
   const win = window;
   if (!win.state)
     return;
-  history.push({
+  undoHistoryStack.push({
     state: JSON.parse(JSON.stringify(win.state)),
     seed,
     selected: [...selected]
   });
-  if (history.length > MAX_HISTORY) {
-    history.shift();
+  if (undoHistoryStack.length > MAX_HISTORY) {
+    undoHistoryStack.shift();
   }
 }
 function rewindOneStep() {
-  const prev = history.pop();
+  const prev = undoHistoryStack.pop();
   if (!prev)
     return;
   const win = window;
@@ -5206,7 +5206,7 @@ function draw() {
   const speciesName = isIdentified ? sp.name : "Unknown Species";
   const genomeBox = $("genome-info");
   if (genomeBox) {
-    genomeBox.innerHTML = `Vigor ${expressTrait(g, "vigor").toFixed(2)} · Angle ${expressTrait(g, "angle").toFixed(0)}° · Len ${expressTrait(g, "lenScale").toFixed(0)}<br>` + `${speciesName} · Nodes ${win.state.nodes.length} · History ${history.length}/${MAX_HISTORY}`;
+    genomeBox.innerHTML = `Vigor ${expressTrait(g, "vigor").toFixed(2)} · Angle ${expressTrait(g, "angle").toFixed(0)}° · Len ${expressTrait(g, "lenScale").toFixed(0)}<br>` + `${speciesName} · Nodes ${win.state.nodes.length} · History ${undoHistoryStack.length}/${MAX_HISTORY}`;
   }
   renderSlots();
 }

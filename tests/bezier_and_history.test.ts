@@ -66,4 +66,34 @@ describe("Quadratic Bézier Geometry & Hit Detection", () => {
     expect(updatedTarget!.isCut).toBe(true);
     expect(prunedState.nodes.length).toBeLessThanOrEqual(originalCount);
   });
+
+  it("manages time-travel history stack with push, trim, and rewind", () => {
+    interface HistoryEntry {
+      state: any;
+      seed: number;
+      selected: number[];
+    }
+    const undoHistoryStack: HistoryEntry[] = [];
+    const MAX_HISTORY = 5;
+
+    for (let i = 1; i <= 8; i++) {
+      undoHistoryStack.push({
+        state: { step: i },
+        seed: i * 10,
+        selected: [],
+      });
+      if (undoHistoryStack.length > MAX_HISTORY) {
+        undoHistoryStack.shift();
+      }
+    }
+
+    expect(undoHistoryStack.length).toBe(MAX_HISTORY);
+    expect(undoHistoryStack[undoHistoryStack.length - 1].state.step).toBe(8);
+    expect(undoHistoryStack[0].state.step).toBe(4);
+
+    const prev = undoHistoryStack.pop();
+    expect(prev).toBeDefined();
+    expect(prev!.state.step).toBe(8);
+    expect(undoHistoryStack.length).toBe(4);
+  });
 });

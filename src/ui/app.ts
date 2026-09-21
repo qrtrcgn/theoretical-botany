@@ -214,24 +214,24 @@ interface HistoryEntry {
   selected: number[];
 }
 
-const history: HistoryEntry[] = [];
+const undoHistoryStack: HistoryEntry[] = [];
 const MAX_HISTORY = 80;
 
 function saveHistory() {
   const win = window as any;
   if (!win.state) return;
-  history.push({
+  undoHistoryStack.push({
     state: JSON.parse(JSON.stringify(win.state)),
     seed,
     selected: [...selected],
   });
-  if (history.length > MAX_HISTORY) {
-    history.shift();
+  if (undoHistoryStack.length > MAX_HISTORY) {
+    undoHistoryStack.shift();
   }
 }
 
 function rewindOneStep() {
-  const prev = history.pop();
+  const prev = undoHistoryStack.pop();
   if (!prev) return;
   const win = window as any;
   win.state = prev.state;
@@ -546,7 +546,7 @@ function draw() {
   if (genomeBox) {
     genomeBox.innerHTML =
       `Vigor ${expressTrait(g, "vigor").toFixed(2)} · Angle ${expressTrait(g, "angle").toFixed(0)}° · Len ${expressTrait(g, "lenScale").toFixed(0)}<br>` +
-      `${speciesName} · Nodes ${win.state.nodes.length} · History ${history.length}/${MAX_HISTORY}`;
+      `${speciesName} · Nodes ${win.state.nodes.length} · History ${undoHistoryStack.length}/${MAX_HISTORY}`;
   }
   renderSlots();
 }
