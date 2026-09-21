@@ -617,8 +617,47 @@ body.dark-mode .ascii-diagram { background: rgba(0, 0, 0, 0.35); color: #cbd5e1;
   text-align: left;
 }
 body.dark-mode .fault-table th, body.dark-mode .fault-table td { border-color: var(--dark-line); }
-.fault-table th { background: rgba(0,0,0,0.03); font-weight: 600; }
-body.dark-mode .fault-table th { background: rgba(255,255,255,0.05); }
+.bonsai-svg-diagram {
+  margin: 10px 0 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.025);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+body.dark-mode .bonsai-svg-diagram {
+  background: rgba(0, 0, 0, 0.35);
+  border-color: var(--dark-line);
+}
+.bonsai-svg-diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+@keyframes windStream {
+  0% { stroke-dashoffset: 40; opacity: 0.25; }
+  50% { opacity: 0.85; }
+  100% { stroke-dashoffset: 0; opacity: 0.25; }
+}
+.wind-anim {
+  stroke-dasharray: 8 6;
+  animation: windStream 3s linear infinite;
+}
+@keyframes cambiumPulse {
+  0%, 100% { stroke: #d97706; filter: drop-shadow(0 0 1px #d97706); }
+  50% { stroke: #059669; filter: drop-shadow(0 0 3.5px #10b981); }
+}
+.cambium-pulse {
+  animation: cambiumPulse 3.5s ease-in-out infinite;
+}
+@keyframes guideBreathe {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+.guide-pulse {
+  animation: guideBreathe 2.4s ease-in-out infinite;
+}
 </style>
 </head>
 <body>
@@ -882,20 +921,53 @@ body.dark-mode .fault-table th { background: rgba(255,255,255,0.05); }
         <div class="faq-section">
           <h3>2. Die 8 klassischen Stilarten (Katakachi)</h3>
           
+          <!-- School 1: Chokkan -->
           <div class="faq-school-card">
             <div class="school-header">
               <span class="school-name">1. Chokkan (直幹 — Streng Aufrecht)</span>
               <span class="school-kanji">直幹</span>
             </div>
-            <div class="ascii-diagram">       ▲  (Apex exakt lotrecht über Wurzelbasis)
-      / \
-    ─/───\─  [Ast 3: Ushiro-eda (Tiefenast nach hinten)]
-    /     \
-  ─/───────\─ [Ast 2: Ni-no-eda (links, ~50% Höhe)]
-  /         \
-─/───────────\─ [Ast 1: Ichi-no-eda (dominant rechts, ~33% Höhe)]
-      ||
-   ───┴┴───  (Kreisförmiges Nebari)</div>
+            <div class="bonsai-svg-diagram">
+              <svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="trunkChokkan" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#4a2e1b"/>
+                    <stop offset="45%" stop-color="#6e462b"/>
+                    <stop offset="100%" stop-color="#3d2414"/>
+                  </linearGradient>
+                  <radialGradient id="foliageChokkan" cx="40%" cy="30%" r="70%">
+                    <stop offset="0%" stop-color="#588b41"/>
+                    <stop offset="70%" stop-color="#2d5a27"/>
+                    <stop offset="100%" stop-color="#1b3b17"/>
+                  </radialGradient>
+                </defs>
+                <line x1="20" y1="156" x2="300" y2="156" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="2,3" opacity="0.4"/>
+                <path d="M 90 152 Q 85 163 100 165 L 220 165 Q 235 163 230 152 Z" fill="#543729" stroke="#3b241a" stroke-width="1.2"/>
+                <ellipse cx="160" cy="152" rx="70" ry="3.5" fill="#3d251a"/>
+                <path d="M 144 153 Q 125 154 112 158 Q 128 156 148 153 Z" fill="#5a3922"/>
+                <path d="M 176 153 Q 195 154 208 158 Q 192 156 172 153 Z" fill="#4a2e1b"/>
+                <polygon points="160,25 242,116 88,88" fill="rgba(217, 119, 6, 0.05)" stroke="rgba(217, 119, 6, 0.5)" stroke-width="1" stroke-dasharray="4,3"/>
+                <text x="165" y="21" font-size="8.5" fill="#d97706" font-family="sans-serif" font-weight="bold">Ten (Apex / Himmel)</text>
+                <text x="238" y="132" font-size="8.5" fill="#d97706" font-family="sans-serif">Chi (1. Ast / Erde)</text>
+                <text x="36" y="86" font-size="8.5" fill="#d97706" font-family="sans-serif">Jin (2. Ast / Mensch)</text>
+                <line x1="160" y1="16" x2="160" y2="168" stroke="#0284c7" stroke-width="1" stroke-dasharray="3,3" class="guide-pulse"/>
+                <circle cx="160" cy="24" r="2.5" fill="#0284c7"/>
+                <circle cx="160" cy="153" r="2.5" fill="#0284c7"/>
+                <path d="M 152 153 L 158.5 28 L 161.5 28 L 168 153 Z" fill="url(#trunkChokkan)"/>
+                <path d="M 160 68 Q 175 66 195 62" stroke="#2c1a0f" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                <ellipse cx="198" cy="61" rx="18" ry="6" fill="#1e3f1a" opacity="0.85"/>
+                <path d="M 165 120 Q 195 123 226 118" stroke="#5a3922" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+                <ellipse cx="228" cy="116" rx="26" ry="8.5" fill="url(#foliageChokkan)"/>
+                <ellipse cx="225" cy="113" rx="18" ry="5.5" fill="#6ba34b" opacity="0.6"/>
+                <path d="M 156 92 Q 130 95 102 89" stroke="#5a3922" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+                <ellipse cx="98" cy="87" rx="22" ry="7.5" fill="url(#foliageChokkan)"/>
+                <ellipse cx="96" cy="85" rx="14" ry="4.5" fill="#6ba34b" opacity="0.6"/>
+                <ellipse cx="160" cy="26" rx="24" ry="9" fill="url(#foliageChokkan)"/>
+                <ellipse cx="160" cy="23" rx="16" ry="6" fill="#6ba34b" opacity="0.6"/>
+                <rect x="8" y="8" width="140" height="18" rx="4" fill="rgba(2, 132, 199, 0.12)" stroke="rgba(2, 132, 199, 0.3)" stroke-width="0.8"/>
+                <text x="14" y="20.5" font-size="9" fill="#0284c7" font-family="sans-serif" font-weight="600">Lotabweichung |Δx| ≤ 6% H</text>
+              </svg>
+            </div>
             <ul class="school-reqs">
               <li><strong>Merkmal:</strong> Kerzengerader Stamm, sichtbare harmonische Verjüngung von unten nach oben.</li>
               <li><strong>Erkennungskriterium:</strong> Horizontale Abweichung der Krone |Δx| ≤ 6% der Gesamthöhe, Sinuosität S ≤ 1.05. Keine Äste unter Topfrand.</li>
@@ -903,16 +975,57 @@ body.dark-mode .fault-table th { background: rgba(255,255,255,0.05); }
             </ul>
           </div>
 
+          <!-- School 2: Moyogi -->
           <div class="faq-school-card">
             <div class="school-header">
               <span class="school-name">2. Moyogi (模様木 — Frei Aufrecht)</span>
               <span class="school-kanji">模様木</span>
             </div>
-            <div class="ascii-diagram">       ▲  (Krone kehrt lotrecht über Wurzelbasis zurück!)
-     (   \
-      )   \───► [Ast an Außenbiegung (Kyokusho)]
-     (
-   ───┴┴───</div>
+            <div class="bonsai-svg-diagram">
+              <svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="trunkMoyogi" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#4a2e1b"/>
+                    <stop offset="50%" stop-color="#6e462b"/>
+                    <stop offset="100%" stop-color="#3d2414"/>
+                  </linearGradient>
+                  <radialGradient id="foliageMoyogi" cx="40%" cy="30%" r="70%">
+                    <stop offset="0%" stop-color="#588b41"/>
+                    <stop offset="70%" stop-color="#2d5a27"/>
+                    <stop offset="100%" stop-color="#1b3b17"/>
+                  </radialGradient>
+                </defs>
+                <line x1="20" y1="156" x2="300" y2="156" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="2,3" opacity="0.4"/>
+                <path d="M 85 152 Q 80 163 95 165 L 215 165 Q 230 163 225 152 Z" fill="#543729" stroke="#3b241a" stroke-width="1.2"/>
+                <ellipse cx="155" cy="152" rx="70" ry="3.5" fill="#3d251a"/>
+                <!-- Plumb Line returning apex over nebari -->
+                <line x1="155" y1="16" x2="155" y2="168" stroke="#0284c7" stroke-width="1.2" stroke-dasharray="3,3" class="guide-pulse"/>
+                <circle cx="155" cy="24" r="2.5" fill="#0284c7"/>
+                <circle cx="155" cy="153" r="2.5" fill="#0284c7"/>
+                <!-- Sinusoidal S-Curved Trunk -->
+                <path d="M 148 153 C 190 135, 202 112, 175 92 C 148 72, 122 56, 153 28 L 157 28 C 128 56, 154 72, 183 92 C 212 112, 198 135, 162 153 Z" fill="url(#trunkMoyogi)"/>
+                <!-- Outer Curve 1: Right (Kyokusho Branch) -->
+                <circle cx="196" cy="112" r="4" fill="#10b981"/>
+                <path d="M 194 112 Q 218 116 242 110" stroke="#5a3922" stroke-width="3" fill="none" stroke-linecap="round"/>
+                <ellipse cx="244" cy="108" rx="25" ry="8" fill="url(#foliageMoyogi)"/>
+                <text x="206" y="128" font-size="8.5" fill="#10b981" font-family="sans-serif" font-weight="bold">Kyokusho (Außenbiegung) ✔️</text>
+                <!-- Inner Crook (Forbidden Uchikomi zone) -->
+                <circle cx="154" cy="92" r="4.5" fill="#ef4444"/>
+                <line x1="151" y1="89" x2="157" y2="95" stroke="#fff" stroke-width="1.2"/>
+                <line x1="157" y1="89" x2="151" y2="95" stroke="#fff" stroke-width="1.2"/>
+                <text x="96" y="102" font-size="8" fill="#ef4444" font-family="sans-serif" font-weight="bold">Uchikomi-Fehler ❌</text>
+                <!-- Outer Curve 2: Left (Kyokusho Branch) -->
+                <circle cx="132" cy="66" r="4" fill="#10b981"/>
+                <path d="M 132 66 Q 106 68 82 62" stroke="#5a3922" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+                <ellipse cx="80" cy="60" rx="22" ry="7" fill="url(#foliageMoyogi)"/>
+                <text x="56" y="50" font-size="8.5" fill="#10b981" font-family="sans-serif" font-weight="bold">Kyokusho ✔️</text>
+                <!-- Apex Pad centered over nebari -->
+                <ellipse cx="155" cy="24" rx="24" ry="9" fill="url(#foliageMoyogi)"/>
+                <ellipse cx="155" cy="21" rx="16" ry="6" fill="#6ba34b" opacity="0.6"/>
+                <rect x="8" y="8" width="180" height="18" rx="4" fill="rgba(2, 132, 199, 0.12)" stroke="rgba(2, 132, 199, 0.3)" stroke-width="0.8"/>
+                <text x="14" y="20.5" font-size="9" fill="#0284c7" font-family="sans-serif" font-weight="600">Apex kehrt über Wurzel zurück (|Δx| ≤ 14%)</text>
+              </svg>
+            </div>
             <ul class="school-reqs">
               <li><strong>Merkmal:</strong> Sanft geschwungener Stammverlauf in 3–5 wechselnden Kurven.</li>
               <li><strong>Die eiserne NBA-Regel:</strong> Trotz aller Biegungen <em>muss der Scheitelpunkt (Apex) wieder genau über die Wurzelbasis zurückkehren</em> (|Δx| ≤ 14%).</li>
@@ -920,43 +1033,155 @@ body.dark-mode .fault-table th { background: rgba(255,255,255,0.05); }
             </ul>
           </div>
 
+          <!-- School 3: Shakan -->
           <div class="faq-school-card">
             <div class="school-header">
               <span class="school-name">3. Shakan (斜幹 — Geneigter Stamm)</span>
               <span class="school-kanji">斜幹</span>
             </div>
-            <div class="ascii-diagram">           ▲  (Geneigte Krone)
-          /
-        /   ◄─── [Kräftiger Gegengewicht-Ast]
-      /
-   ──┴┴─── (Ausgeprägte Ankerwurzeln auf Zugseite)</div>
+            <div class="bonsai-svg-diagram">
+              <svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="trunkShakan" x1="0" y1="1" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#4a2e1b"/>
+                    <stop offset="60%" stop-color="#6e462b"/>
+                    <stop offset="100%" stop-color="#3d2414"/>
+                  </linearGradient>
+                  <radialGradient id="foliageShakan" cx="40%" cy="30%" r="70%">
+                    <stop offset="0%" stop-color="#588b41"/>
+                    <stop offset="70%" stop-color="#2d5a27"/>
+                    <stop offset="100%" stop-color="#1b3b17"/>
+                  </radialGradient>
+                </defs>
+                <line x1="20" y1="156" x2="300" y2="156" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="2,3" opacity="0.4"/>
+                <!-- Oval Pot shifted left -->
+                <path d="M 60 152 Q 55 163 70 165 L 190 165 Q 205 163 200 152 Z" fill="#543729" stroke="#3b241a" stroke-width="1.2"/>
+                <ellipse cx="130" cy="152" rx="70" ry="3.5" fill="#3d251a"/>
+                <!-- Vertical reference from nebari -->
+                <line x1="110" y1="36" x2="110" y2="154" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3"/>
+                <!-- Angle Arc -->
+                <path d="M 110 120 A 34 34 0 0 1 128 123" fill="none" stroke="#d97706" stroke-width="1.5"/>
+                <text x="122" y="114" font-size="8.5" fill="#d97706" font-family="sans-serif" font-weight="bold">32° Neigung (25°–40°)</text>
+                <!-- Strong Anchor Roots on tension side -->
+                <path d="M 104 153 Q 76 155 58 160 Q 82 157 108 153 Z" fill="#4a2e1b"/>
+                <text x="32" y="146" font-size="8" fill="#d97706" font-family="sans-serif" font-weight="bold">Zug-/Ankerwurzeln</text>
+                <!-- Slanted Trunk -->
+                <path d="M 104 153 L 222 38 L 226 38 L 118 153 Z" fill="url(#trunkShakan)"/>
+                <!-- Counterbalance Branch (reaching left) -->
+                <path d="M 136 120 Q 104 124 74 116" stroke="#5a3922" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+                <ellipse cx="72" cy="114" rx="26" ry="9" fill="url(#foliageShakan)"/>
+                <ellipse cx="70" cy="111" rx="18" ry="6" fill="#6ba34b" opacity="0.6"/>
+                <text x="18" y="102" font-size="8.5" fill="#10b981" font-family="sans-serif" font-weight="bold">Gegengewichts-Ast ✔️</text>
+                <text x="18" y="112" font-size="7.5" fill="#64748b" font-family="sans-serif">(Optisches Gleichgewicht)</text>
+                <!-- Mid-trunk right branch -->
+                <path d="M 172 82 Q 200 86 228 80" stroke="#5a3922" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+                <ellipse cx="230" cy="78" rx="20" ry="7" fill="url(#foliageShakan)"/>
+                <!-- Slanted Apex Crown -->
+                <ellipse cx="228" cy="36" rx="25" ry="9" fill="url(#foliageShakan)"/>
+                <ellipse cx="228" cy="33" rx="17" ry="6" fill="#6ba34b" opacity="0.6"/>
+              </svg>
+            </div>
             <ul class="school-reqs">
               <li><strong>Merkmal:</strong> Stamm neigt sich mit 20° bis 45° gegenüber der Senkrechten zur Seite.</li>
               <li><strong>Gleichgewicht:</strong> Ein kräftiger Ausgleichsast wächst in die Gegenrichtung der Neigung, um optisches Übergewicht zu verhindern.</li>
             </ul>
           </div>
 
+          <!-- School 4: Kengai -->
           <div class="faq-school-card">
             <div class="school-header">
               <span class="school-name">4. Kengai (懸崖 — Vollkaskade)</span>
               <span class="school-kanji">懸崖</span>
             </div>
-            <div class="ascii-diagram">   (Topfrand) ─────[y = 0]
-      /           |  (Hoher Kaskadentopf)
-    (Bogen)       |
-     \            ─────[y = 38px Topfboden]
-      \
-       ▼  (Kaskadenspitze stürzt tief UNTER den Topfboden hinab!)</div>
+            <div class="bonsai-svg-diagram">
+              <svg viewBox="0 0 320 185" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="trunkKengai" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#6e462b"/>
+                    <stop offset="100%" stop-color="#3d2414"/>
+                  </linearGradient>
+                  <radialGradient id="foliageKengai" cx="40%" cy="30%" r="70%">
+                    <stop offset="0%" stop-color="#588b41"/>
+                    <stop offset="70%" stop-color="#2d5a27"/>
+                    <stop offset="100%" stop-color="#1b3b17"/>
+                  </radialGradient>
+                </defs>
+                <!-- Display Stand (Shoku) -->
+                <rect x="52" y="60" width="76" height="6" fill="#2d1e18" rx="1"/>
+                <line x1="56" y1="66" x2="56" y2="175" stroke="#2d1e18" stroke-width="4"/>
+                <line x1="124" y1="66" x2="124" y2="175" stroke="#2d1e18" stroke-width="4"/>
+                <line x1="54" y1="130" x2="126" y2="130" stroke="#2d1e18" stroke-width="2"/>
+                <!-- Tall Deep Cascade Pot -->
+                <path d="M 60 65 L 120 65 L 112 122 L 68 122 Z" fill="#42291d" stroke="#2c1a11" stroke-width="1.2"/>
+                <!-- Reference Guide Lines -->
+                <line x1="60" y1="65" x2="290" y2="65" stroke="#0284c7" stroke-width="0.9" stroke-dasharray="3,3" opacity="0.7"/>
+                <text x="215" y="61" font-size="8.5" fill="#0284c7" font-family="sans-serif">Topfrand (y = 0px)</text>
+                <line x1="68" y1="122" x2="290" y2="122" stroke="#d97706" stroke-width="0.9" stroke-dasharray="3,3" opacity="0.7"/>
+                <text x="215" y="118" font-size="8.5" fill="#d97706" font-family="sans-serif">Topfboden (y = 38px)</text>
+                <!-- Cascading Trunk: arches over rim, plunges deep below base -->
+                <path d="M 90 65 Q 112 48 125 64 Q 146 94 150 124 Q 154 148 165 172" stroke="url(#trunkKengai)" stroke-width="7" fill="none" stroke-linecap="round"/>
+                <!-- Waterfall Tier Foliage Pads -->
+                <ellipse cx="126" cy="62" rx="16" ry="6" fill="url(#foliageKengai)"/>
+                <ellipse cx="148" cy="100" rx="18" ry="7" fill="url(#foliageKengai)"/>
+                <ellipse cx="152" cy="138" rx="17" ry="6.5" fill="url(#foliageKengai)"/>
+                <!-- Terminal Cascade Drop Pad below pot base -->
+                <ellipse cx="166" cy="172" rx="16" ry="6" fill="url(#foliageKengai)"/>
+                <ellipse cx="166" cy="170" rx="10" ry="4" fill="#6ba34b" opacity="0.6"/>
+                <!-- Plunging Indicator Bracket -->
+                <line x1="184" y1="122" x2="184" y2="172" stroke="#ef4444" stroke-width="1.4" class="guide-pulse"/>
+                <polygon points="184,176 181,170 187,170" fill="#ef4444"/>
+                <text x="192" y="148" font-size="8.5" fill="#ef4444" font-family="sans-serif" font-weight="bold">Fällt tief UNTER</text>
+                <text x="192" y="158" font-size="8.5" fill="#ef4444" font-family="sans-serif" font-weight="bold">Topfboden (y &gt; 38px)!</text>
+              </svg>
+            </div>
             <ul class="school-reqs">
               <li><strong>Merkmal:</strong> Symbolisiert einen Baum an einer schroffen Klippe, herabgedrückt von Schneelasten.</li>
               <li><strong>Kriterium:</strong> Die Astspitze fällt <em>unter den Boden des Topfes</em> (y > 38px). Der Anfangsstamm steigt zunächst kurz über den Topfrand auf.</li>
             </ul>
           </div>
 
+          <!-- School 5: Han-Kengai -->
           <div class="faq-school-card">
             <div class="school-header">
               <span class="school-name">5. Han-Kengai (半懸崖 — Halbkaskade)</span>
               <span class="school-kanji">半懸崖</span>
+            </div>
+            <div class="bonsai-svg-diagram">
+              <svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="trunkHanKengai" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#6e462b"/>
+                    <stop offset="100%" stop-color="#3d2414"/>
+                  </linearGradient>
+                  <radialGradient id="foliageHanKengai" cx="40%" cy="30%" r="70%">
+                    <stop offset="0%" stop-color="#588b41"/>
+                    <stop offset="70%" stop-color="#2d5a27"/>
+                    <stop offset="100%" stop-color="#1b3b17"/>
+                  </radialGradient>
+                </defs>
+                <!-- Medium Cascade Pot -->
+                <path d="M 60 85 L 125 85 L 118 135 L 68 135 Z" fill="#4a3022" stroke="#2c1a11" stroke-width="1.2"/>
+                <!-- Reference Guide Lines -->
+                <line x1="60" y1="85" x2="295" y2="85" stroke="#0284c7" stroke-width="0.9" stroke-dasharray="3,3" opacity="0.7"/>
+                <text x="215" y="81" font-size="8.5" fill="#0284c7" font-family="sans-serif">Topfrand (y = 0px)</text>
+                <line x1="68" y1="135" x2="295" y2="135" stroke="#d97706" stroke-width="0.9" stroke-dasharray="3,3" opacity="0.7"/>
+                <text x="215" y="147" font-size="8.5" fill="#d97706" font-family="sans-serif">Topfboden (y = 38px)</text>
+                <!-- Permitted Zone Highlight -->
+                <rect x="135" y="85" width="155" height="50" fill="rgba(16, 185, 129, 0.06)" stroke="rgba(16, 185, 129, 0.2)" stroke-dasharray="2,2"/>
+                <text x="142" y="98" font-size="8" fill="#10b981" font-family="sans-serif" font-weight="bold">Zulässige Halbkaskaden-Zone</text>
+                <!-- Upright Apex Crown over pot -->
+                <path d="M 92 85 Q 96 68 100 52" stroke="url(#trunkHanKengai)" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+                <ellipse cx="102" cy="50" rx="18" ry="7" fill="url(#foliageHanKengai)"/>
+                <!-- Semi-Cascade Shelf Branch: below rim, ABOVE base -->
+                <path d="M 92 85 Q 124 82 155 98 Q 195 116 245 110" stroke="url(#trunkHanKengai)" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <ellipse cx="160" cy="98" rx="18" ry="6.5" fill="url(#foliageHanKengai)"/>
+                <ellipse cx="205" cy="112" rx="20" ry="7" fill="url(#foliageHanKengai)"/>
+                <ellipse cx="248" cy="108" rx="22" ry="7.5" fill="url(#foliageHanKengai)"/>
+                <ellipse cx="248" cy="106" rx="14" ry="5" fill="#6ba34b" opacity="0.6"/>
+                <!-- Target Checkpoint -->
+                <circle cx="248" cy="108" r="3.5" fill="#10b981"/>
+                <text x="142" y="128" font-size="8" fill="#10b981" font-family="sans-serif">Spitze unter Rand, aber OBERHALB Boden ✔️</text>
+              </svg>
             </div>
             <ul class="school-reqs">
               <li><strong>Merkmal:</strong> Ein über eine Schlucht oder ein Flussufer ragender Hauptast.</li>
@@ -964,10 +1189,44 @@ body.dark-mode .fault-table th { background: rgba(255,255,255,0.05); }
             </ul>
           </div>
 
+          <!-- School 6: Bunjingi -->
           <div class="faq-school-card">
             <div class="school-header">
               <span class="school-name">6. Bunjingi (文人木 — Literatenstil)</span>
               <span class="school-kanji">文人木</span>
+            </div>
+            <div class="bonsai-svg-diagram">
+              <svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <radialGradient id="foliageBunjingi" cx="40%" cy="30%" r="70%">
+                    <stop offset="0%" stop-color="#588b41"/>
+                    <stop offset="70%" stop-color="#2d5a27"/>
+                    <stop offset="100%" stop-color="#1b3b17"/>
+                  </radialGradient>
+                </defs>
+                <line x1="20" y1="158" x2="300" y2="158" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="2,3" opacity="0.4"/>
+                <!-- Shallow Nanban slab pot -->
+                <ellipse cx="160" cy="156" rx="46" ry="4.5" fill="#3b241a" stroke="#27160e" stroke-width="1"/>
+                <!-- Slender Calligraphic Trunk -->
+                <path d="M 158 156 Q 182 125 152 92 Q 130 62 165 34" stroke="#4a2e1b" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+                <!-- Bare Lower 75% Bracket -->
+                <line x1="110" y1="156" x2="110" y2="60" stroke="#d97706" stroke-width="1.2"/>
+                <line x1="106" y1="156" x2="114" y2="156" stroke="#d97706" stroke-width="1.2"/>
+                <line x1="106" y1="60" x2="114" y2="60" stroke="#d97706" stroke-width="1.2"/>
+                <text x="20" y="108" font-size="8.5" fill="#d97706" font-family="sans-serif" font-weight="bold">Untere 75% kahl</text>
+                <text x="20" y="118" font-size="7.5" fill="#64748b" font-family="sans-serif">(Asketisch &amp; astfrei)</text>
+                <!-- Delicate top 25% crown tufts -->
+                <path d="M 160 46 Q 185 44 206 38" stroke="#4a2e1b" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+                <ellipse cx="208" cy="36" rx="16" ry="5.5" fill="url(#foliageBunjingi)"/>
+                <path d="M 154 38 Q 138 35 125 30" stroke="#4a2e1b" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+                <ellipse cx="123" cy="29" rx="13" ry="5" fill="url(#foliageBunjingi)"/>
+                <!-- Apex Tuft -->
+                <ellipse cx="166" cy="28" rx="15" ry="5.5" fill="url(#foliageBunjingi)"/>
+                <!-- Callout Badges -->
+                <rect x="195" y="80" width="112" height="32" rx="4" fill="rgba(217, 119, 6, 0.08)" stroke="rgba(217, 119, 6, 0.3)" stroke-width="0.8"/>
+                <text x="202" y="93" font-size="8.5" fill="#d97706" font-family="sans-serif" font-weight="bold">Schlankheitsgrad</text>
+                <text x="202" y="104" font-size="8.5" fill="#0284c7" font-family="sans-serif" font-weight="600">Höhe / Dicke ≥ 16:1</text>
+              </svg>
             </div>
             <ul class="school-reqs">
               <li><strong>Merkmal:</strong> Asketisch, minimalistisch, inspiriert von den Tuschezeichnungen der Nanga-Mönche.</li>
@@ -976,10 +1235,48 @@ body.dark-mode .fault-table th { background: rgba(255,255,255,0.05); }
             </ul>
           </div>
 
+          <!-- School 7: Fukinagashi -->
           <div class="faq-school-card">
             <div class="school-header">
               <span class="school-name">7. Fukinagashi (吹流し — Windgepeitscht)</span>
               <span class="school-kanji">吹流し</span>
+            </div>
+            <div class="bonsai-svg-diagram">
+              <svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="trunkFukinagashi" x1="0" y1="1" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#4a2e1b"/>
+                    <stop offset="100%" stop-color="#6e462b"/>
+                  </linearGradient>
+                  <radialGradient id="foliageFukinagashi" cx="40%" cy="30%" r="70%">
+                    <stop offset="0%" stop-color="#588b41"/>
+                    <stop offset="70%" stop-color="#2d5a27"/>
+                    <stop offset="100%" stop-color="#1b3b17"/>
+                  </radialGradient>
+                </defs>
+                <!-- Animated Wind Streamlines -->
+                <path d="M 15 36 C 85 30, 160 42, 305 34" stroke="#38bdf8" stroke-width="1.2" fill="none" class="wind-anim"/>
+                <path d="M 10 74 C 95 68, 175 80, 310 72" stroke="#38bdf8" stroke-width="1.4" fill="none" class="wind-anim"/>
+                <path d="M 25 116 C 105 110, 190 122, 300 114" stroke="#38bdf8" stroke-width="1.1" fill="none" class="wind-anim"/>
+                <!-- Wind direction indicator -->
+                <text x="14" y="24" font-size="9" fill="#0284c7" font-family="sans-serif" font-weight="bold">Ständiger Seewind ➔➔➔</text>
+                <!-- Pot shifted left -->
+                <path d="M 50 152 Q 45 163 60 165 L 160 165 Q 175 163 170 152 Z" fill="#543729" stroke="#3b241a" stroke-width="1.2"/>
+                <ellipse cx="110" cy="152" rx="55" ry="3.5" fill="#3d251a"/>
+                <!-- Swept Trunk leaning hard right -->
+                <path d="M 100 153 Q 128 120 185 70" stroke="url(#trunkFukinagashi)" stroke-width="6.5" fill="none" stroke-linecap="round"/>
+                <!-- Parallel Streaming Branches pointing to the right (Leeward) -->
+                <path d="M 125 125 Q 175 128 232 122" stroke="#4a2e1b" stroke-width="3" fill="none" stroke-linecap="round"/>
+                <ellipse cx="235" cy="120" rx="24" ry="6" fill="url(#foliageFukinagashi)"/>
+                <path d="M 152 96 Q 205 98 265 92" stroke="#4a2e1b" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+                <ellipse cx="268" cy="90" rx="26" ry="6.5" fill="url(#foliageFukinagashi)"/>
+                <path d="M 185 70 Q 235 72 288 66" stroke="#4a2e1b" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                <ellipse cx="290" cy="64" rx="24" ry="6" fill="url(#foliageFukinagashi)"/>
+                <!-- Badge -->
+                <rect x="180" y="145" width="130" height="26" rx="4" fill="rgba(2, 132, 199, 0.1)" stroke="rgba(2, 132, 199, 0.3)" stroke-width="0.8"/>
+                <text x="186" y="157" font-size="8" fill="#0284c7" font-family="sans-serif" font-weight="bold">Unidirektionaler Fluss</text>
+                <text x="186" y="166" font-size="7.5" fill="#64748b" font-family="sans-serif">≥ 75% Krone in Lee-Richtung</text>
+              </svg>
             </div>
             <ul class="school-reqs">
               <li><strong>Merkmal:</strong> Ständiger, unerbittlicher Seewind aus einer Richtung.</li>
@@ -987,10 +1284,51 @@ body.dark-mode .fault-table th { background: rgba(255,255,255,0.05); }
             </ul>
           </div>
 
+          <!-- School 8: Jin & Shari -->
           <div class="faq-school-card">
             <div class="school-header">
               <span class="school-name">8. Jin & Shari (死に木 / 舎利 — Totholz-Ästhetik)</span>
               <span class="school-kanji">神・舎利</span>
+            </div>
+            <div class="bonsai-svg-diagram">
+              <svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="shariWood" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#f5f0e8"/>
+                    <stop offset="50%" stop-color="#eae0d0"/>
+                    <stop offset="100%" stop-color="#d8cbb7"/>
+                  </linearGradient>
+                  <radialGradient id="foliageJinShari" cx="40%" cy="30%" r="70%">
+                    <stop offset="0%" stop-color="#588b41"/>
+                    <stop offset="70%" stop-color="#2d5a27"/>
+                    <stop offset="100%" stop-color="#1b3b17"/>
+                  </radialGradient>
+                </defs>
+                <line x1="20" y1="156" x2="300" y2="156" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="2,3" opacity="0.4"/>
+                <path d="M 85 152 Q 80 163 95 165 L 215 165 Q 230 163 225 152 Z" fill="#543729" stroke="#3b241a" stroke-width="1.2"/>
+                <ellipse cx="155" cy="152" rx="65" ry="3.5" fill="#3d251a"/>
+                <!-- Gnarled Weathered Trunk with Shari Deadwood -->
+                <path d="M 135 153 C 140 115, 120 75, 125 45 L 132 45 C 138 75, 160 115, 168 153 Z" fill="url(#shariWood)" stroke="#c4b59d" stroke-width="0.8"/>
+                <!-- Fine wood grain cracks in Shari -->
+                <line x1="138" y1="140" x2="132" y2="90" stroke="#c4b59d" stroke-width="0.6"/>
+                <line x1="150" y1="130" x2="140" y2="70" stroke="#c4b59d" stroke-width="0.6"/>
+                <!-- Jin Deadwood Spikes (Bleached antler branch tips) -->
+                <polygon points="125,45 112,25 128,42" fill="#f5f0e8" stroke="#c4b59d" stroke-width="0.7"/>
+                <polygon points="120,68 96,55 118,72" fill="#f5f0e8" stroke="#c4b59d" stroke-width="0.7"/>
+                <text x="52" y="32" font-size="8.5" fill="#78716c" font-family="sans-serif" font-weight="bold">Jin (Ast-Totholz)</text>
+                <text x="62" y="118" font-size="8.5" fill="#78716c" font-family="sans-serif" font-weight="bold">Shari (Stamm)</text>
+                <!-- Continuous Pulsing Cambium Lifeline (Mizusui) -->
+                <path d="M 166 153 C 160 120, 142 90, 172 65 C 185 54, 192 46, 202 36" stroke="#10b981" stroke-width="4.2" fill="none" stroke-linecap="round" class="cambium-pulse"/>
+                <text x="180" y="76" font-size="8.5" fill="#10b981" font-family="sans-serif" font-weight="bold">Mizusui (Lebensader) ✔️</text>
+                <text x="180" y="86" font-size="7.5" fill="#64748b" font-family="sans-serif">Ununterbrochene Saftbahn!</text>
+                <!-- Living Foliage Crown nourished by Mizusui -->
+                <path d="M 200 38 Q 225 36 248 32" stroke="#5a3922" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+                <ellipse cx="250" cy="30" rx="22" ry="7.5" fill="url(#foliageJinShari)"/>
+                <ellipse cx="204" cy="34" rx="16" ry="6" fill="url(#foliageJinShari)"/>
+                <!-- Vital Rule Warning -->
+                <rect x="8" y="8" width="220" height="18" rx="4" fill="rgba(16, 185, 129, 0.1)" stroke="rgba(16, 185, 129, 0.3)" stroke-width="0.8"/>
+                <text x="14" y="20.5" font-size="8.5" fill="#059669" font-family="sans-serif" font-weight="bold">Regel: Lebende Rindenader darf nie fehlen!</text>
+              </svg>
             </div>
             <ul class="school-reqs">
               <li><strong>Merkmal:</strong> Gebleichtes, uraltes Totholz (Jin = Astspitzen, Shari = Stammpartien) als Zeichen von Vergänglichkeit (Wabi-Sabi).</li>
@@ -1002,6 +1340,65 @@ body.dark-mode .fault-table th { background: rgba(255,255,255,0.05); }
         <div class="faq-section">
           <h3>3. Verbotene Fehleräste (Imi-eda 忌み枝)</h3>
           <p>Klassische Preisrichter ahnden geometrische Unregelmäßigkeiten mit strengen Punktabzügen:</p>
+          <!-- Dedicated Visual Faults Comparison SVG -->
+          <div class="bonsai-svg-diagram">
+            <svg viewBox="0 0 340 145" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <radialGradient id="faultLeafGrad" cx="40%" cy="30%" r="70%">
+                  <stop offset="0%" stop-color="#588b41"/>
+                  <stop offset="100%" stop-color="#2d5a27"/>
+                </radialGradient>
+              </defs>
+              <!-- Panel 1: Kuruma-eda (Radäste) -->
+              <rect x="8" y="6" width="76" height="132" rx="6" fill="rgba(239, 68, 68, 0.05)" stroke="rgba(239, 68, 68, 0.25)" stroke-width="0.8"/>
+              <text x="14" y="20" font-size="8" fill="#ef4444" font-family="sans-serif" font-weight="bold">Kuruma-eda ❌</text>
+              <line x1="46" y1="130" x2="46" y2="32" stroke="#5a3922" stroke-width="4.5" stroke-linecap="round"/>
+              <!-- 3 branches at exact same height -->
+              <path d="M 46 80 L 16 72" stroke="#5a3922" stroke-width="2" stroke-linecap="round"/>
+              <ellipse cx="14" cy="71" rx="8" ry="3.5" fill="url(#faultLeafGrad)"/>
+              <path d="M 46 80 L 76 72" stroke="#5a3922" stroke-width="2" stroke-linecap="round"/>
+              <ellipse cx="78" cy="71" rx="8" ry="3.5" fill="url(#faultLeafGrad)"/>
+              <path d="M 46 80 L 46 62" stroke="#5a3922" stroke-width="2" stroke-linecap="round"/>
+              <ellipse cx="46" cy="60" rx="7" ry="3.5" fill="url(#faultLeafGrad)"/>
+              <circle cx="46" cy="80" r="4" fill="#ef4444"/>
+              <text x="14" y="112" font-size="7" fill="#64748b" font-family="sans-serif">≥ 3 Äste auf einer</text>
+              <text x="14" y="122" font-size="7" fill="#64748b" font-family="sans-serif">Stammhöhe</text>
+
+              <!-- Panel 2: Kannon-eda (Balkenäste) -->
+              <rect x="90" y="6" width="76" height="132" rx="6" fill="rgba(239, 68, 68, 0.05)" stroke="rgba(239, 68, 68, 0.25)" stroke-width="0.8"/>
+              <text x="96" y="20" font-size="8" fill="#ef4444" font-family="sans-serif" font-weight="bold">Kannon-eda ❌</text>
+              <line x1="128" y1="130" x2="128" y2="32" stroke="#5a3922" stroke-width="4.5" stroke-linecap="round"/>
+              <!-- 2 opposite horizontal branches -->
+              <line x1="98" y1="80" x2="158" y2="80" stroke="#5a3922" stroke-width="2.4" stroke-linecap="round"/>
+              <ellipse cx="96" cy="80" rx="8" ry="4" fill="url(#faultLeafGrad)"/>
+              <ellipse cx="160" cy="80" rx="8" ry="4" fill="url(#faultLeafGrad)"/>
+              <circle cx="128" cy="80" r="4" fill="#ef4444"/>
+              <text x="96" y="112" font-size="7" fill="#64748b" font-family="sans-serif">Gegenüberliegende</text>
+              <text x="96" y="122" font-size="7" fill="#64748b" font-family="sans-serif">Balkenäste</text>
+
+              <!-- Panel 3: Uchikomi (Bauchast) -->
+              <rect x="172" y="6" width="76" height="132" rx="6" fill="rgba(239, 68, 68, 0.05)" stroke="rgba(239, 68, 68, 0.25)" stroke-width="0.8"/>
+              <text x="178" y="20" font-size="8" fill="#ef4444" font-family="sans-serif" font-weight="bold">Uchikomi ❌</text>
+              <path d="M 196 130 Q 225 95 196 75 Q 180 58 196 32" stroke="#5a3922" stroke-width="4" fill="none" stroke-linecap="round"/>
+              <!-- Branch in inner concave crook -->
+              <path d="M 212 92 L 238 88" stroke="#5a3922" stroke-width="2" stroke-linecap="round"/>
+              <ellipse cx="240" cy="87" rx="8" ry="3.5" fill="url(#faultLeafGrad)"/>
+              <circle cx="212" cy="92" r="3.5" fill="#ef4444"/>
+              <text x="178" y="112" font-size="7" fill="#64748b" font-family="sans-serif">Ast in der inneren</text>
+              <text x="178" y="122" font-size="7" fill="#64748b" font-family="sans-serif">Biegefalte</text>
+
+              <!-- Panel 4: Richtig (Kyokusho) -->
+              <rect x="254" y="6" width="78" height="132" rx="6" fill="rgba(16, 185, 129, 0.06)" stroke="rgba(16, 185, 129, 0.3)" stroke-width="0.8"/>
+              <text x="260" y="20" font-size="8" fill="#10b981" font-family="sans-serif" font-weight="bold">Richtig ✔️</text>
+              <path d="M 284 130 Q 306 95 284 75 Q 268 58 284 32" stroke="#5a3922" stroke-width="4" fill="none" stroke-linecap="round"/>
+              <!-- Branch strictly on outer curve -->
+              <path d="M 276 68 L 260 62" stroke="#5a3922" stroke-width="2" stroke-linecap="round"/>
+              <ellipse cx="258" cy="61" rx="8" ry="3.5" fill="url(#faultLeafGrad)"/>
+              <circle cx="276" cy="68" r="3.5" fill="#10b981"/>
+              <text x="260" y="112" font-size="7" fill="#10b981" font-family="sans-serif" font-weight="bold">Äste nur an den</text>
+              <text x="260" y="122" font-size="7" fill="#10b981" font-family="sans-serif" font-weight="bold">Außenkurven</text>
+            </svg>
+          </div>
           <table class="fault-table">
             <thead>
               <tr>

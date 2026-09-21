@@ -135,9 +135,9 @@ function normalizeAngle(angle) {
 }
 var DEFAULT_CYCLE_LENGTH = 250;
 var MAX_TOTAL_NODES = 2000;
-var BUDBREAK_CHANCE_PER_STEP = 0.006;
-var EPICORMIC_MIN_AGE = 45;
-var EPICORMIC_CHANCE_PER_STEP = 0.0015;
+var BUDBREAK_CHANCE_PER_STEP = 0.035;
+var EPICORMIC_MIN_AGE = 40;
+var EPICORMIC_CHANCE_PER_STEP = 0.008;
 var LEAF_FALL_WINDOW = [125, 190];
 var FLOWER_FALL_WINDOW = [95, 155];
 var MAX_FALL_STEPS = 150;
@@ -183,10 +183,13 @@ function growOnce(state, prng) {
   const droughtFactor = currentWater < 30 ? 0.4 + 0.6 * (currentWater / 30) : 1;
   updateFallingDebris(newState);
   triggerAbscissionIfDue(newState, season, prng);
-  if (season === 0 || season === 80 || newState.soilMoisture && newState.soilMoisture > 0.65 && newState.step % 25 === 0) {
+  const livingTips = newState.nodes.filter((n) => !n.isCut && n.terminal && (n.type === "meristem" || n.type === "stem"));
+  const needsFlushing = livingTips.length <= 1 && season < 180;
+  const isMoist = (newState.soilMoisture ?? 0.5) > 0.45;
+  if (season === 0 || season === 70 || season === 120 || needsFlushing || isMoist && newState.step % 15 === 0) {
     budActivation(newState, prng);
   }
-  if (season < 160 || newState.soilMoisture && newState.soilMoisture > 0.55) {
+  if (season < 170 || isMoist || needsFlushing) {
     budbreakStep(newState, prng);
     epicormicStep(newState, prng);
   }
@@ -282,6 +285,32 @@ function growOnce(state, prng) {
         length: expressTrait(g, "flowerRadius"),
         targetLength: expressTrait(g, "flowerRadius"),
         v: 0,
+        budState: "dormant",
+        isCut: false,
+        resourceProduction: 0,
+        shade: tip.shade,
+        curve: 0,
+        leafSizeJitter: 0,
+        leafShapeJitter: 0,
+        leafHueShift: 0,
+        hasThorns: false,
+        fruitAge: 0,
+        fallState: "attached",
+        fallSeed: prng.random()
+      });
+      nextNodes.push({
+        id: -newState.idCounter++,
+        parentId: tip.id,
+        x: tipEndX,
+        y: tipEndY,
+        angle: normalizeAngle(tip.angle + (prng.random() < 0.5 ? 0.75 : -0.75)),
+        depth: tip.depth + 1,
+        type: "bud",
+        terminal: false,
+        age: 0,
+        length: 0,
+        targetLength: expressTrait(g, "lenScale") * 0.8,
+        v: 0.65 + prng.random() * 0.3,
         budState: "dormant",
         isCut: false,
         resourceProduction: 0,
@@ -478,7 +507,7 @@ function budActivation(state, prng) {
       return;
     if (n.depth < 1)
       return;
-    const hasBudChild = nodes.some((c) => c.parentId === n.id && (c.type === "bud" || c.type === "leaf"));
+    const hasBudChild = nodes.some((c) => c.parentId === n.id && (c.type === "bud" || c.type === "meristem"));
     if (hasBudChild)
       return;
     if (prng.random() > 0.35 * densityBrakeBud)
@@ -627,8 +656,9 @@ function triggerAbscissionIfDue(state, season, prng) {
 }
 function budbreakStep(state, prng) {
   const densityBrake = Math.max(0, 1 - state.nodes.length / MAX_TOTAL_NODES);
-  const moistureBonus = Math.max(0, ((state.soilMoisture ?? 0.5) - 0.4) * 0.06);
-  const breakChance = (BUDBREAK_CHANCE_PER_STEP + moistureBonus) * densityBrake;
+  const moistureBonus = Math.max(0, ((state.soilMoisture ?? 0.5) - 0.4) * 0.08);
+  const seasonBonus = state.step % DEFAULT_CYCLE_LENGTH < 140 ? 0.025 : 0.005;
+  const breakChance = (BUDBREAK_CHANCE_PER_STEP + moistureBonus + seasonBonus) * densityBrake;
   for (const n of state.nodes) {
     if (n.type !== "bud" || n.budState !== "dormant")
       continue;
@@ -1292,6 +1322,24 @@ function drawSingleFloret(ctx, count, radius, petalColor, stamenColor) {
 }
 
 // src/render/canvas.ts
+function safeRoundRect(ctx, x, y, w, h, radii = 0) {
+  if (typeof ctx.roundRect === "function") {
+    ctx.roundRect(x, y, w, h, radii);
+    return;
+  }
+  const r = Array.isArray(radii) ? radii[0] || 0 : radii;
+  if (r <= 0) {
+    ctx.rect(x, y, w, h);
+    return;
+  }
+  const radius = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+}
 function quadBezierPoint(x0, y0, cx, cy, x1, y1, t) {
   const mt = 1 - t;
   return {
@@ -1446,17 +1494,17 @@ function renderTokonomaStand(ctx, darkMode) {
   const trimColor = darkMode ? "#1c1917" : "#292524";
   ctx.fillStyle = tableColor;
   ctx.beginPath();
-  ctx.roundRect(-102, 36, 204, 8, [2]);
+  safeRoundRect(ctx, -102, 36, 204, 8, [2]);
   ctx.fill();
   ctx.strokeStyle = darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.2)";
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.fillStyle = trimColor;
   ctx.beginPath();
-  ctx.roundRect(-98, 44, 14, 14, [0, 0, 4, 4]);
+  safeRoundRect(ctx, -98, 44, 14, 14, [0, 0, 4, 4]);
   ctx.fill();
   ctx.beginPath();
-  ctx.roundRect(84, 44, 14, 14, [0, 0, 4, 4]);
+  safeRoundRect(ctx, 84, 44, 14, 14, [0, 0, 4, 4]);
   ctx.fill();
   ctx.beginPath();
   ctx.moveTo(-84, 44);
@@ -1470,7 +1518,7 @@ function renderTokonomaAccent(ctx, accentId, x, y, darkMode, windTime, particles
   ctx.translate(x, y);
   ctx.fillStyle = darkMode ? "#0c0a09" : "#292524";
   ctx.beginPath();
-  ctx.roundRect(-28, -2, 56, 6, [2]);
+  safeRoundRect(ctx, -28, -2, 56, 6, [2]);
   ctx.fill();
   ctx.strokeStyle = darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.3)";
   ctx.lineWidth = 1;
@@ -1564,7 +1612,7 @@ function renderTokonomaAccent(ctx, accentId, x, y, darkMode, windTime, particles
   } else if (accentId === "suiseki_kamogawa_toyama" || accentId === "suiseki_furuya_waterfall") {
     ctx.fillStyle = "#78350f";
     ctx.beginPath();
-    ctx.roundRect(-22, -4, 44, 5, [2]);
+    safeRoundRect(ctx, -22, -4, 44, 5, [2]);
     ctx.fill();
     ctx.fillStyle = accentId === "suiseki_furuya_waterfall" ? "#18181b" : "#27272a";
     ctx.beginPath();
@@ -1640,7 +1688,7 @@ function renderTokonomaAccent(ctx, accentId, x, y, darkMode, windTime, particles
   } else {
     ctx.fillStyle = darkMode ? "#1c1917" : "#292524";
     ctx.beginPath();
-    ctx.roundRect(-20, -3, 40, 5, [2]);
+    safeRoundRect(ctx, -20, -3, 40, 5, [2]);
     ctx.fill();
     const mossGrad = ctx.createRadialGradient(-3, -13, 2, 0, -11, 14);
     mossGrad.addColorStop(0, darkMode ? "#22c55e" : "#16a34a");
@@ -1836,14 +1884,14 @@ function renderPlant(ctx, state, w, h, devOptions) {
     const grooveShadow = state.darkMode ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.65)";
     ctx.fillStyle = state.darkMode ? "#0b0f17" : "#544537";
     ctx.beginPath();
-    ctx.roundRect(-420, 14, 840, 96, [12]);
+    safeRoundRect(ctx, -420, 14, 840, 96, [12]);
     ctx.fill();
     ctx.strokeStyle = state.darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.25)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.fillStyle = sandBg;
     ctx.beginPath();
-    ctx.roundRect(-414, 17, 828, 90, [10]);
+    safeRoundRect(ctx, -414, 17, 828, 90, [10]);
     ctx.fill();
     for (let gy = 23;gy <= 101; gy += 6) {
       ctx.strokeStyle = grooveColor;
@@ -1989,7 +2037,7 @@ function renderPlant(ctx, state, w, h, devOptions) {
     }
     ctx.fillStyle = potBodyColor;
     ctx.beginPath();
-    ctx.roundRect(-85, 2, 170, 36, [6, 6, 16, 16]);
+    safeRoundRect(ctx, -85, 2, 170, 36, [6, 6, 16, 16]);
     ctx.fill();
     ctx.strokeStyle = potBorderColor;
     ctx.lineWidth = 3;
@@ -2017,7 +2065,7 @@ function renderPlant(ctx, state, w, h, devOptions) {
     ctx.strokeStyle = potRimHighlight;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(-88, 0, 176, 8, [4]);
+    safeRoundRect(ctx, -88, 0, 176, 8, [4]);
     ctx.stroke();
   }
   const moisture = Math.max(0, Math.min(1, state.soilMoisture ?? 0.5));
@@ -2053,7 +2101,7 @@ function renderPlant(ctx, state, w, h, devOptions) {
   if (isWinterSeason) {
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     ctx.beginPath();
-    ctx.roundRect(-86, -1, 172, 3.5, [2]);
+    safeRoundRect(ctx, -86, -1, 172, 3.5, [2]);
     ctx.fill();
     ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
     ctx.beginPath();
@@ -2586,6 +2634,167 @@ function renderWaterDroplets(ctx, droplets) {
     ctx.beginPath();
     ctx.arc(d.x - d.radius * 0.3, d.y - d.radius * 0.3, d.radius * 0.35, 0, Math.PI * 2);
     ctx.fill();
+  }
+  ctx.restore();
+}
+function getCopperCanRosePosition(can) {
+  const cosT = Math.cos(can.tiltAngle);
+  const sinT = Math.sin(can.tiltAngle);
+  const localX = -44;
+  const localY = -22;
+  const worldX = can.x + (localX * cosT - localY * sinT);
+  const worldY = can.y + (localX * sinT + localY * cosT);
+  return {
+    x: worldX,
+    y: worldY,
+    angle: -Math.PI * 0.62 + can.tiltAngle
+  };
+}
+function renderCopperWateringCan(ctx, can) {
+  if (!can || !can.active || can.alpha <= 0.01)
+    return;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, can.alpha));
+  const shadowY = can.y + 68;
+  const shadowScale = Math.max(0.4, 1 - can.liftProgress * 0.25);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
+  ctx.beginPath();
+  ctx.ellipse(can.x - 6, shadowY, 30 * shadowScale, 7 * shadowScale, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(can.x, can.y);
+  ctx.rotate(can.tiltAngle);
+  ctx.strokeStyle = "#a84824";
+  ctx.lineWidth = 3.6;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(18, -12);
+  ctx.bezierCurveTo(40, -16, 42, 18, 19, 21);
+  ctx.stroke();
+  ctx.strokeStyle = "#f39c6b";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(19, -11);
+  ctx.bezierCurveTo(38, -14, 40, 16, 20, 19);
+  ctx.stroke();
+  const bodyGrad = ctx.createLinearGradient(-20, -18, 22, 22);
+  bodyGrad.addColorStop(0, "#f3a67d");
+  bodyGrad.addColorStop(0.28, "#cf6f42");
+  bodyGrad.addColorStop(0.7, "#994420");
+  bodyGrad.addColorStop(1, "#54210d");
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.moveTo(-16, -17);
+  ctx.lineTo(16, -17);
+  ctx.lineTo(21, 21);
+  ctx.lineTo(-19, 21);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "rgba(78, 127, 110, 0.4)";
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(-18, 19);
+  ctx.lineTo(20, 19);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(-14, -15);
+  ctx.lineTo(14, -15);
+  ctx.stroke();
+  ctx.strokeStyle = "#6b2a12";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.strokeStyle = "#cf6f42";
+  ctx.lineWidth = 3.2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-9, -17);
+  ctx.bezierCurveTo(-13, -44, 13, -44, 9, -17);
+  ctx.stroke();
+  ctx.strokeStyle = "#f3a67d";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(-7, -17);
+  ctx.bezierCurveTo(-11, -41, 11, -41, 7, -17);
+  ctx.stroke();
+  const spoutGrad = ctx.createLinearGradient(-18, 14, -44, -22);
+  spoutGrad.addColorStop(0, "#8c3b1a");
+  spoutGrad.addColorStop(0.55, "#d97746");
+  spoutGrad.addColorStop(1, "#f59e0b");
+  ctx.strokeStyle = spoutGrad;
+  ctx.lineWidth = 4.2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-18, 14);
+  ctx.bezierCurveTo(-26, 12, -33, -3, -44, -22);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255, 240, 210, 0.7)";
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(-18, 13);
+  ctx.bezierCurveTo(-26, 11, -33, -3, -43, -21);
+  ctx.stroke();
+  ctx.save();
+  ctx.translate(-44, -22);
+  ctx.rotate(-0.45);
+  ctx.fillStyle = "#b45309";
+  ctx.fillRect(-2, -3, 4, 6);
+  const roseGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, 9);
+  roseGrad.addColorStop(0, "#fef08a");
+  roseGrad.addColorStop(0.55, "#eab308");
+  roseGrad.addColorStop(1, "#78350f");
+  ctx.fillStyle = roseGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 8.5, 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#fef9c3";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.fillStyle = "#451a03";
+  const holeOffsets = [
+    [0, 0],
+    [-4, 0],
+    [4, 0],
+    [-2, -2],
+    [2, -2],
+    [-2, 2],
+    [2, 2]
+  ];
+  for (const [hx, hy] of holeOffsets) {
+    ctx.beginPath();
+    ctx.arc(hx, hy, 0.7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.restore();
+}
+function renderWaterStreams(ctx, streams) {
+  if (!streams || streams.length === 0)
+    return;
+  ctx.save();
+  ctx.lineCap = "round";
+  for (const s of streams) {
+    if (s.alpha <= 0.01)
+      continue;
+    const speed = Math.hypot(s.vx, s.vy);
+    if (speed < 0.1)
+      continue;
+    const tailLen = Math.min(s.len, speed * 0.12);
+    const tailX = s.x - s.vx / speed * tailLen;
+    const tailY = s.y - s.vy / speed * tailLen;
+    ctx.strokeStyle = `rgba(186, 230, 253, ${s.alpha * 0.78})`;
+    ctx.lineWidth = s.thickness || 1.2;
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(s.x, s.y);
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(255, 255, 255, ${s.alpha * 0.95})`;
+    ctx.lineWidth = Math.max(0.6, (s.thickness || 1.2) * 0.45);
+    ctx.beginPath();
+    ctx.moveTo(tailX + (s.x - tailX) * 0.35, tailY + (s.y - tailY) * 0.35);
+    ctx.lineTo(s.x, s.y);
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -4607,10 +4816,26 @@ var windEnabled = false;
 var currentTool = "shear";
 var slashPoints = [];
 var waterDroplets = [];
+var waterStreams = [];
+var wateringCan = {
+  active: false,
+  x: 0,
+  y: 0,
+  targetX: 0,
+  targetY: 0,
+  tiltAngle: 0,
+  pourProgress: 0,
+  liftProgress: 0,
+  alpha: 0
+};
+var isPouring = false;
 var breatheInterval = null;
 var breathePhase = "inhale";
 function setTool(tool) {
   currentTool = tool;
+  if (tool !== "water" && isPouring) {
+    stopWatering();
+  }
   const tools = ["shear", "water", "wire", "jin", "rake", "breathe"];
   tools.forEach((t) => {
     const btn = $(`tool-${t}`);
@@ -4626,7 +4851,7 @@ function setTool(tool) {
     if (tool === "shear")
       hint.textContent = "✂️ Schere: Über Äste wischen zum Schneiden oder Zupfen";
     else if (tool === "water")
-      hint.textContent = "\uD83D\uDCA7 Gießen: Sanften Nebel sprühen & Boden befeuchten";
+      hint.textContent = "\uD83D\uDCA7 Gießen: Kupferkanne heben, neigen & feine Wasserstrahlen spenden";
     else if (tool === "wire")
       hint.textContent = "\uD83E\uDEA2 Draht: Ast berühren & ziehen zum Formen mit Kupferdraht";
     else if (tool === "jin")
@@ -4955,8 +5180,14 @@ function draw() {
   if (slashPoints.length > 1) {
     renderBladeSlashTrail(ctx, slashPoints, Date.now());
   }
+  if (waterStreams.length > 0) {
+    renderWaterStreams(ctx, waterStreams);
+  }
   if (waterDroplets.length > 0) {
     renderWaterDroplets(ctx, waterDroplets);
+  }
+  if (wateringCan.active) {
+    renderCopperWateringCan(ctx, wateringCan);
   }
   const [name] = info.split("·");
   const seasonInfo = seasonOf(win.state.step, win.state.cycleLength || 250);
@@ -5039,30 +5270,33 @@ function getPlantCoord(clientX, clientY) {
     y: (clientY - r.top - oy) / scale
   };
 }
-function sprayWater(cx, cy) {
-  const win = window;
-  if (!win.state)
-    return;
-  for (let i = 0;i < 6; i++) {
-    const angle = Math.PI / 4 + Math.random() * (Math.PI / 2);
-    const speed = 40 + Math.random() * 100;
-    waterDroplets.push({
-      x: cx + (Math.random() - 0.5) * 16,
-      y: cy + (Math.random() - 0.5) * 16,
-      vx: Math.cos(angle) * speed * (Math.random() > 0.5 ? 1 : -1),
-      vy: Math.sin(angle) * speed,
-      radius: 2.2 + Math.random() * 3.2,
-      alpha: 0.9
-    });
-  }
-  win.state.soilMoisture = Math.min(1, (win.state.soilMoisture ?? 0.5) + 0.035);
-  if (Math.random() < 0.1) {
-    win.state = growOnce(win.state, prng);
+function startWatering(cx, cy) {
+  isPouring = true;
+  if (!wateringCan.active) {
+    wateringCan.active = true;
+    wateringCan.x = cx + 75;
+    wateringCan.y = cy - 20;
+    wateringCan.targetX = cx + 75;
+    wateringCan.targetY = cy - 45;
+    wateringCan.tiltAngle = 0;
+    wateringCan.pourProgress = 0;
+    wateringCan.liftProgress = 0;
+    wateringCan.alpha = 0.2;
+  } else {
+    wateringCan.targetX = cx + 75;
+    wateringCan.targetY = cy - 45;
   }
   try {
     playWaterSound();
   } catch {}
   draw();
+}
+function updateWateringTarget(cx, cy) {
+  wateringCan.targetX = cx + 75;
+  wateringCan.targetY = cy - 45;
+}
+function stopWatering() {
+  isPouring = false;
 }
 function pruneAt(clientX, clientY) {
   const win = window;
@@ -5150,7 +5384,7 @@ canvas.addEventListener("pointerdown", (e) => {
   if (currentTool === "shear") {
     slashPoints = [{ x: canvasX, y: canvasY, time: Date.now() }];
   } else if (currentTool === "water") {
-    sprayWater(canvasX, canvasY);
+    startWatering(canvasX, canvasY);
   } else if (currentTool === "rake") {
     rakeSandAt(canvasX, canvasY);
   } else if (currentTool === "jin") {
@@ -5195,9 +5429,7 @@ canvas.addEventListener("pointermove", (e) => {
     slashPoints.push({ x: canvasX, y: canvasY, time: Date.now() });
     draw();
   } else if (currentTool === "water") {
-    if (Math.random() < 0.45) {
-      sprayWater(canvasX, canvasY);
-    }
+    updateWateringTarget(canvasX, canvasY);
   } else if (currentTool === "rake") {
     rakeSandAt(canvasX, canvasY);
   } else if (currentTool === "wire" && activeWireNodeId !== null) {
@@ -5233,6 +5465,9 @@ canvas.addEventListener("pointerup", (e) => {
   const win = window;
   if (!win.state)
     return;
+  if (isPouring) {
+    stopWatering();
+  }
   if (currentTool === "rake") {
     saveHistory();
     return;
@@ -5314,6 +5549,9 @@ canvas.addEventListener("pointercancel", () => {
   activePointerId = null;
   dragging = false;
   activeWireNodeId = null;
+  if (isPouring) {
+    stopWatering();
+  }
 });
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
@@ -5683,6 +5921,7 @@ function animLoop(now) {
   lastWindTime = now;
   const win = window;
   let fxRedrawNeeded = false;
+  let growthRedrawNeeded = false;
   if (slashPoints.length > 0) {
     const cutoff = Date.now() - 350;
     const initialLen = slashPoints.length;
@@ -5700,6 +5939,63 @@ function animLoop(now) {
       d.alpha -= dt * 1.6;
     }
     waterDroplets = waterDroplets.filter((d) => d.alpha > 0.02 && d.y < canvas.height + 20);
+    fxRedrawNeeded = true;
+  }
+  if (wateringCan.active) {
+    wateringCan.x += (wateringCan.targetX - wateringCan.x) * Math.min(1, dt * 10);
+    wateringCan.y += (wateringCan.targetY - wateringCan.y) * Math.min(1, dt * 10);
+    if (isPouring) {
+      wateringCan.liftProgress = Math.min(1, wateringCan.liftProgress + dt * 3.5);
+      wateringCan.pourProgress = Math.min(1, wateringCan.pourProgress + dt * 4);
+      wateringCan.alpha = Math.min(1, wateringCan.alpha + dt * 5);
+      const targetTilt = 0.65;
+      wateringCan.tiltAngle += (targetTilt - wateringCan.tiltAngle) * Math.min(1, dt * 7);
+      if (wateringCan.tiltAngle > 0.25) {
+        const rose = getCopperCanRosePosition(wateringCan);
+        const jetsToEmit = 4;
+        for (let j = 0;j < jetsToEmit; j++) {
+          const spread = (Math.random() - 0.5) * 0.35;
+          const jetAngle = rose.angle + spread;
+          const jetSpeed = 160 + Math.random() * 110;
+          waterStreams.push({
+            x: rose.x + (Math.random() - 0.5) * 6,
+            y: rose.y + (Math.random() - 0.5) * 4,
+            vx: Math.cos(jetAngle) * jetSpeed,
+            vy: Math.sin(jetAngle) * jetSpeed,
+            len: 18 + Math.random() * 14,
+            alpha: 0.95,
+            thickness: 1.1 + Math.random() * 0.35,
+            seed: Math.random()
+          });
+        }
+        if (win.state) {
+          win.state.soilMoisture = Math.min(1, (win.state.soilMoisture ?? 0.5) + dt * 0.08);
+          if (Math.random() < 0.08) {
+            win.state = growOnce(win.state, prng);
+            growthRedrawNeeded = true;
+          }
+        }
+      }
+    } else {
+      wateringCan.tiltAngle += (0 - wateringCan.tiltAngle) * Math.min(1, dt * 6);
+      wateringCan.pourProgress = Math.max(0, wateringCan.pourProgress - dt * 3.5);
+      wateringCan.liftProgress = Math.max(0, wateringCan.liftProgress - dt * 3);
+      wateringCan.alpha = Math.max(0, wateringCan.alpha - dt * 2.8);
+      if (wateringCan.alpha <= 0.02 && wateringCan.tiltAngle < 0.05) {
+        wateringCan.active = false;
+      }
+    }
+    fxRedrawNeeded = true;
+  }
+  if (waterStreams.length > 0) {
+    const gravity = 620;
+    for (const s of waterStreams) {
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.vy += gravity * dt;
+      s.alpha -= dt * 1.5;
+    }
+    waterStreams = waterStreams.filter((s) => s.alpha > 0.02 && s.y < canvas.height + 30);
     fxRedrawNeeded = true;
   }
   if (win.state?.barkFlakes && win.state.barkFlakes.length > 0) {
@@ -5735,7 +6031,6 @@ function animLoop(now) {
   }
   const timeMultiplier = win.state?.timeSpeed ?? 1;
   const currentGrowSpeed = (win.state?.growSpeed ?? 1) * timeMultiplier;
-  let growthRedrawNeeded = false;
   if (playing && win.state && currentGrowSpeed > 0) {
     const elongationRate = 7 * currentGrowSpeed * dt;
     const leafUnfurlRate = 1.8 * currentGrowSpeed * dt;

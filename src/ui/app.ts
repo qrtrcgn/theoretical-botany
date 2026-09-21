@@ -1,4 +1,4 @@
-import type { PlantState } from "../sim/types";
+import type { PlantState, WateringCanState, WaterStreamJet } from "../sim/types";
 import { createPrng, type Prng } from "../sim/prng";
 import { freshState, growOnce, pruneNodeAt } from "../sim/growth";
 import { breedGenomes, expressTrait } from "../sim/genetics";
@@ -15,6 +15,9 @@ import {
   closestPointOnQuadratic,
   renderBladeSlashTrail,
   renderWaterDroplets,
+  getCopperCanRosePosition,
+  renderCopperWateringCan,
+  renderWaterStreams,
   type SlashPoint,
   type WaterDroplet,
   type DevRenderOptions,
@@ -101,11 +104,27 @@ let currentTool: ZenTool = "shear";
 
 let slashPoints: SlashPoint[] = [];
 let waterDroplets: WaterDroplet[] = [];
+let waterStreams: WaterStreamJet[] = [];
+let wateringCan: WateringCanState = {
+  active: false,
+  x: 0,
+  y: 0,
+  targetX: 0,
+  targetY: 0,
+  tiltAngle: 0,
+  pourProgress: 0,
+  liftProgress: 0,
+  alpha: 0,
+};
+let isPouring = false;
 let breatheInterval: number | null = null;
 let breathePhase: "inhale" | "hold" | "exhale" = "inhale";
 
 function setTool(tool: ZenTool) {
   currentTool = tool;
+  if (tool !== "water" && isPouring) {
+    stopWatering();
+  }
   const tools: ZenTool[] = ["shear", "water", "wire", "jin", "rake", "breathe"];
   tools.forEach((t) => {
     const btn = $(`tool-${t}`);
@@ -118,7 +137,7 @@ function setTool(tool: ZenTool) {
   const hint = $("zen-hint");
   if (hint) {
     if (tool === "shear") hint.textContent = "✂️ Schere: Über Äste wischen zum Schneiden oder Zupfen";
-    else if (tool === "water") hint.textContent = "💧 Gießen: Sanften Nebel sprühen & Boden befeuchten";
+    else if (tool === "water") hint.textContent = "💧 Gießen: Kupferkanne heben, neigen & feine Wasserstrahlen spenden";
     else if (tool === "wire") hint.textContent = "🪢 Draht: Ast berühren & ziehen zum Formen mit Kupferdraht";
     else if (tool === "jin") hint.textContent = "🪵 Jin: Ast berühren oder wischen zum Formen gebleichten Totholzes";
     else if (tool === "rake") hint.textContent = "🪨 Harke: Im Sandbett ziehen für meditative Karesansui-Wellen";
@@ -496,8 +515,14 @@ function draw() {
   if (slashPoints.length > 1) {
     renderBladeSlashTrail(ctx, slashPoints, Date.now());
   }
+  if (waterStreams.length > 0) {
+    renderWaterStreams(ctx, waterStreams);
+  }
   if (waterDroplets.length > 0) {
     renderWaterDroplets(ctx, waterDroplets);
+  }
+  if (wateringCan.active) {
+    renderCopperWateringCan(ctx, wateringCan);
   }
 
   const [name] = info.split("·");
@@ -599,35 +624,35 @@ function getPlantCoord(clientX: number, clientY: number): { x: number; y: number
   };
 }
 
-function sprayWater(cx: number, cy: number) {
-  const win = window as any;
-  if (!win.state) return;
-
-  for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 4) + Math.random() * (Math.PI / 2);
-    const speed = 40 + Math.random() * 100;
-    waterDroplets.push({
-      x: cx + (Math.random() - 0.5) * 16,
-      y: cy + (Math.random() - 0.5) * 16,
-      vx: Math.cos(angle) * speed * (Math.random() > 0.5 ? 1 : -1),
-      vy: Math.sin(angle) * speed,
-      radius: 2.2 + Math.random() * 3.2,
-      alpha: 0.9,
-    });
+function startWatering(cx: number, cy: number) {
+  isPouring = true;
+  if (!wateringCan.active) {
+    wateringCan.active = true;
+    wateringCan.x = cx + 75;
+    wateringCan.y = cy - 20;
+    wateringCan.targetX = cx + 75;
+    wateringCan.targetY = cy - 45;
+    wateringCan.tiltAngle = 0;
+    wateringCan.pourProgress = 0;
+    wateringCan.liftProgress = 0;
+    wateringCan.alpha = 0.2;
+  } else {
+    wateringCan.targetX = cx + 75;
+    wateringCan.targetY = cy - 45;
   }
-
-  // Nourish soil moisture in pot
-  win.state.soilMoisture = Math.min(1.0, (win.state.soilMoisture ?? 0.5) + 0.035);
-
-  // Subtle chance to stimulate growth burst
-  if (Math.random() < 0.1) {
-    win.state = growOnce(win.state, prng);
-  }
-
   try {
     playWaterSound();
   } catch {}
   draw();
+}
+
+function updateWateringTarget(cx: number, cy: number) {
+  wateringCan.targetX = cx + 75;
+  wateringCan.targetY = cy - 45;
+}
+
+function stopWatering() {
+  isPouring = false;
 }
 
 function pruneAt(clientX: number, clientY: number) {
@@ -734,7 +759,7 @@ canvas.addEventListener("pointerdown", (e) => {
   if (currentTool === "shear") {
     slashPoints = [{ x: canvasX, y: canvasY, time: Date.now() }];
   } else if (currentTool === "water") {
-    sprayWater(canvasX, canvasY);
+    startWatering(canvasX, canvasY);
   } else if (currentTool === "rake") {
     rakeSandAt(canvasX, canvasY);
   } else if (currentTool === "jin") {
@@ -784,9 +809,7 @@ canvas.addEventListener("pointermove", (e) => {
     slashPoints.push({ x: canvasX, y: canvasY, time: Date.now() });
     draw();
   } else if (currentTool === "water") {
-    if (Math.random() < 0.45) {
-      sprayWater(canvasX, canvasY);
-    }
+    updateWateringTarget(canvasX, canvasY);
   } else if (currentTool === "rake") {
     rakeSandAt(canvasX, canvasY);
   } else if (currentTool === "wire" && activeWireNodeId !== null) {
@@ -822,6 +845,10 @@ canvas.addEventListener("pointerup", (e) => {
 
   const win = window as any;
   if (!win.state) return;
+
+  if (isPouring) {
+    stopWatering();
+  }
 
   if (currentTool === "rake") {
     saveHistory();
@@ -915,6 +942,9 @@ canvas.addEventListener("pointercancel", () => {
   activePointerId = null;
   dragging = false;
   activeWireNodeId = null;
+  if (isPouring) {
+    stopWatering();
+  }
 });
 
 canvas.addEventListener(
@@ -1329,6 +1359,7 @@ function animLoop(now: number) {
 
   // Transient serene visual FX updates (blade fade & falling water droplets)
   let fxRedrawNeeded = false;
+  let growthRedrawNeeded = false;
   if (slashPoints.length > 0) {
     const cutoff = Date.now() - 350;
     const initialLen = slashPoints.length;
@@ -1347,6 +1378,76 @@ function animLoop(now: number) {
       d.alpha -= dt * 1.6;
     }
     waterDroplets = waterDroplets.filter((d) => d.alpha > 0.02 && d.y < canvas.height + 20);
+    fxRedrawNeeded = true;
+  }
+
+  // --- Copper Watering Can Physics & Fine Stream Jet Emission ---
+  if (wateringCan.active) {
+    wateringCan.x += (wateringCan.targetX - wateringCan.x) * Math.min(1.0, dt * 10);
+    wateringCan.y += (wateringCan.targetY - wateringCan.y) * Math.min(1.0, dt * 10);
+
+    if (isPouring) {
+      wateringCan.liftProgress = Math.min(1.0, wateringCan.liftProgress + dt * 3.5);
+      wateringCan.pourProgress = Math.min(1.0, wateringCan.pourProgress + dt * 4.0);
+      wateringCan.alpha = Math.min(1.0, wateringCan.alpha + dt * 5.0);
+
+      // Tilt forward towards ~0.65 rad (~37 degrees)
+      const targetTilt = 0.65;
+      wateringCan.tiltAngle += (targetTilt - wateringCan.tiltAngle) * Math.min(1.0, dt * 7);
+
+      // Emit fine streaming water lines once tilted past threshold (>0.25 rad)
+      if (wateringCan.tiltAngle > 0.25) {
+        const rose = getCopperCanRosePosition(wateringCan);
+        const jetsToEmit = 4;
+        for (let j = 0; j < jetsToEmit; j++) {
+          const spread = (Math.random() - 0.5) * 0.35;
+          const jetAngle = rose.angle + spread;
+          const jetSpeed = 160 + Math.random() * 110;
+          waterStreams.push({
+            x: rose.x + (Math.random() - 0.5) * 6,
+            y: rose.y + (Math.random() - 0.5) * 4,
+            vx: Math.cos(jetAngle) * jetSpeed,
+            vy: Math.sin(jetAngle) * jetSpeed,
+            len: 18 + Math.random() * 14,
+            alpha: 0.95,
+            thickness: 1.1 + Math.random() * 0.35,
+            seed: Math.random(),
+          });
+        }
+
+        // Nourish soil moisture in pot
+        if (win.state) {
+          win.state.soilMoisture = Math.min(1.0, (win.state.soilMoisture ?? 0.5) + dt * 0.08);
+          // Subtle chance to stimulate growth burst
+          if (Math.random() < 0.08) {
+            win.state = growOnce(win.state, prng);
+            growthRedrawNeeded = true;
+          }
+        }
+      }
+    } else {
+      // Un-tilt and lower
+      wateringCan.tiltAngle += (0 - wateringCan.tiltAngle) * Math.min(1.0, dt * 6);
+      wateringCan.pourProgress = Math.max(0, wateringCan.pourProgress - dt * 3.5);
+      wateringCan.liftProgress = Math.max(0, wateringCan.liftProgress - dt * 3.0);
+      wateringCan.alpha = Math.max(0, wateringCan.alpha - dt * 2.8);
+      if (wateringCan.alpha <= 0.02 && wateringCan.tiltAngle < 0.05) {
+        wateringCan.active = false;
+      }
+    }
+    fxRedrawNeeded = true;
+  }
+
+  // Update fine water stream lines
+  if (waterStreams.length > 0) {
+    const gravity = 620;
+    for (const s of waterStreams) {
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.vy += gravity * dt;
+      s.alpha -= dt * 1.5;
+    }
+    waterStreams = waterStreams.filter((s) => s.alpha > 0.02 && s.y < canvas.height + 30);
     fxRedrawNeeded = true;
   }
 
@@ -1388,7 +1489,6 @@ function animLoop(now: number) {
   // --- Smooth 60 FPS Fluid Botanical Growth & Calibrated Zen Cadence ---
   const timeMultiplier = win.state?.timeSpeed ?? 1.0;
   const currentGrowSpeed = (win.state?.growSpeed ?? 1.0) * timeMultiplier;
-  let growthRedrawNeeded = false;
 
   if (playing && win.state && currentGrowSpeed > 0) {
     // 1. Continuous smooth sub-pixel elongation of meristems and shoots

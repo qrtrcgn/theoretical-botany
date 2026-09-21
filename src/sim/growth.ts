@@ -32,9 +32,9 @@ export function normalizeAngle(angle: number): number {
 const DEFAULT_CYCLE_LENGTH = 250;
 const MAX_TOTAL_NODES = 2000; // Reduced from 3500 for better performance
 const BUDBREAK_WINDOW_END = 110;
-const BUDBREAK_CHANCE_PER_STEP = 0.006;
-const EPICORMIC_MIN_AGE = 45;
-const EPICORMIC_CHANCE_PER_STEP = 0.0015;
+const BUDBREAK_CHANCE_PER_STEP = 0.035;
+const EPICORMIC_MIN_AGE = 40;
+const EPICORMIC_CHANCE_PER_STEP = 0.008;
 const LEAF_FALL_WINDOW: [number, number] = [125, 190];
 const FLOWER_FALL_WINDOW: [number, number] = [95, 155];
 const MAX_FALL_STEPS = 150;
@@ -90,12 +90,25 @@ export function growOnce(
   updateFallingDebris(newState);
   triggerAbscissionIfDue(newState, season, prng);
 
-  if (season === 0 || season === 80 || (newState.soilMoisture && newState.soilMoisture > 0.65 && newState.step % 25 === 0)) {
+  const livingTips = newState.nodes.filter(
+    (n) => !n.isCut && n.terminal && (n.type === "meristem" || n.type === "stem")
+  );
+
+  const needsFlushing = livingTips.length <= 1 && season < 180;
+  const isMoist = (newState.soilMoisture ?? 0.5) > 0.45;
+
+  if (
+    season === 0 ||
+    season === 70 ||
+    season === 120 ||
+    needsFlushing ||
+    (isMoist && newState.step % 15 === 0)
+  ) {
     budActivation(newState, prng);
   }
 
-  // Active budbreak in spring/summer and responsive to watering
-  if (season < 160 || (newState.soilMoisture && newState.soilMoisture > 0.55)) {
+  // Active budbreak in spring/summer, responsive to watering, and during flushes
+  if (season < 170 || isMoist || needsFlushing) {
     budbreakStep(newState, prng);
     epicormicStep(newState, prng);
   }
@@ -204,6 +217,34 @@ export function growOnce(
         length: expressTrait(g, "flowerRadius"),
         targetLength: expressTrait(g, "flowerRadius"),
         v: 0,
+        budState: "dormant",
+        isCut: false,
+        resourceProduction: 0,
+        shade: tip.shade,
+        curve: 0,
+        leafSizeJitter: 0,
+        leafShapeJitter: 0,
+        leafHueShift: 0,
+        hasThorns: false,
+        fruitAge: 0,
+        fallState: "attached",
+        fallSeed: prng.random(),
+      });
+
+      // Spawn axillary continuation bud behind terminal flower for future vegetative flushes
+      nextNodes.push({
+        id: -newState.idCounter++,
+        parentId: tip.id,
+        x: tipEndX,
+        y: tipEndY,
+        angle: normalizeAngle(tip.angle + (prng.random() < 0.5 ? 0.75 : -0.75)),
+        depth: tip.depth + 1,
+        type: "bud",
+        terminal: false,
+        age: 0,
+        length: 0,
+        targetLength: expressTrait(g, "lenScale") * 0.8,
+        v: 0.65 + prng.random() * 0.3,
         budState: "dormant",
         isCut: false,
         resourceProduction: 0,
@@ -410,7 +451,7 @@ function budActivation(state: PlantState, prng: Prng): void {
     if (n.isCut) return;
     if (n.depth < 1) return;
     const hasBudChild = nodes.some(
-      (c) => c.parentId === n.id && (c.type === "bud" || c.type === "leaf")
+      (c) => c.parentId === n.id && (c.type === "bud" || c.type === "meristem")
     );
     if (hasBudChild) return;
     if (prng.random() > 0.35 * densityBrakeBud) return;
@@ -564,8 +605,9 @@ export function triggerAbscissionIfDue(state: PlantState, season: number, prng: 
 
 export function budbreakStep(state: PlantState, prng: Prng): void {
   const densityBrake = Math.max(0, 1 - state.nodes.length / MAX_TOTAL_NODES);
-  const moistureBonus = Math.max(0, ((state.soilMoisture ?? 0.5) - 0.4) * 0.06);
-  const breakChance = (BUDBREAK_CHANCE_PER_STEP + moistureBonus) * densityBrake;
+  const moistureBonus = Math.max(0, ((state.soilMoisture ?? 0.5) - 0.4) * 0.08);
+  const seasonBonus = (state.step % DEFAULT_CYCLE_LENGTH) < 140 ? 0.025 : 0.005;
+  const breakChance = (BUDBREAK_CHANCE_PER_STEP + moistureBonus + seasonBonus) * densityBrake;
   for (const n of state.nodes) {
     if (n.type !== "bud" || n.budState !== "dormant") continue;
     if (prng.random() >= breakChance) continue;

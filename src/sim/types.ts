@@ -186,5 +186,30 @@ export interface PlantState {
   lastRecognizedStyle?: string;
   lastStyleScore?: number;
   tokonomaParticles?: Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; size: number; alpha: number; type: "smoke" | "glow" }>;
+  wateringCan?: WateringCanState;
+  waterStreams?: WaterStreamJet[];
+}
+
+export interface WateringCanState {
+  active: boolean;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  tiltAngle: number; // 0 (upright) to ~0.65 rad (~37°)
+  pourProgress: number; // 0 (rest) to 1 (full pour)
+  liftProgress: number; // 0 (hidden/rest) to 1 (raised above plant)
+  alpha: number;
+}
+
+export interface WaterStreamJet {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  len: number;
+  alpha: number;
+  thickness: number;
+  seed: number;
 }
 

@@ -1,4 +1,4 @@
-import type { PlantState, PlantNode } from "../sim/types";
+import type { PlantState, PlantNode, WateringCanState, WaterStreamJet } from "../sim/types";
 import { expressTrait } from "../sim/genetics";
 import { renderWoodBarkTexture } from "./textures";
 import { drawModularLeaf, drawModularFlower } from "./morphology";
@@ -33,6 +33,32 @@ export interface DevRenderOptions {
   showIds?: boolean;
   showHitbox?: boolean;
   hitRadius?: number;
+}
+
+export function safeRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radii: number | number[] = 0
+): void {
+  if (typeof ctx.roundRect === "function") {
+    ctx.roundRect(x, y, w, h, radii);
+    return;
+  }
+  const r = Array.isArray(radii) ? (radii[0] || 0) : radii;
+  if (r <= 0) {
+    ctx.rect(x, y, w, h);
+    return;
+  }
+  const radius = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
 }
 
 export function quadBezierPoint(x0: number, y0: number, cx: number, cy: number, x1: number, y1: number, t: number): { x: number; y: number } {
@@ -236,7 +262,7 @@ export function renderTokonomaStand(ctx: CanvasRenderingContext2D, darkMode: boo
   // Table top surface
   ctx.fillStyle = tableColor;
   ctx.beginPath();
-  ctx.roundRect(-102, 36, 204, 8, [2]);
+  safeRoundRect(ctx, -102, 36, 204, 8, [2]);
   ctx.fill();
 
   ctx.strokeStyle = darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.2)";
@@ -246,10 +272,10 @@ export function renderTokonomaStand(ctx: CanvasRenderingContext2D, darkMode: boo
   // Carved table apron & corner feet
   ctx.fillStyle = trimColor;
   ctx.beginPath();
-  ctx.roundRect(-98, 44, 14, 14, [0, 0, 4, 4]);
+  safeRoundRect(ctx, -98, 44, 14, 14, [0, 0, 4, 4]);
   ctx.fill();
   ctx.beginPath();
-  ctx.roundRect(84, 44, 14, 14, [0, 0, 4, 4]);
+  safeRoundRect(ctx, 84, 44, 14, 14, [0, 0, 4, 4]);
   ctx.fill();
   ctx.beginPath();
   ctx.moveTo(-84, 44);
@@ -274,7 +300,7 @@ export function renderTokonomaAccent(
   // Hand-carved Wooden Jiita board slab under accent
   ctx.fillStyle = darkMode ? "#0c0a09" : "#292524";
   ctx.beginPath();
-  ctx.roundRect(-28, -2, 56, 6, [2]);
+  safeRoundRect(ctx, -28, -2, 56, 6, [2]);
   ctx.fill();
   ctx.strokeStyle = darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.3)";
   ctx.lineWidth = 1;
@@ -374,7 +400,7 @@ export function renderTokonomaAccent(
   } else if (accentId === "suiseki_kamogawa_toyama" || accentId === "suiseki_furuya_waterfall") {
     ctx.fillStyle = "#78350f";
     ctx.beginPath();
-    ctx.roundRect(-22, -4, 44, 5, [2]);
+    safeRoundRect(ctx, -22, -4, 44, 5, [2]);
     ctx.fill();
 
     ctx.fillStyle = accentId === "suiseki_furuya_waterfall" ? "#18181b" : "#27272a";
@@ -459,7 +485,7 @@ export function renderTokonomaAccent(
     // Default Velvet Moss Sphere (Kokedama)
     ctx.fillStyle = darkMode ? "#1c1917" : "#292524";
     ctx.beginPath();
-    ctx.roundRect(-20, -3, 40, 5, [2]);
+    safeRoundRect(ctx, -20, -3, 40, 5, [2]);
     ctx.fill();
 
     const mossGrad = ctx.createRadialGradient(-3, -13, 2, 0, -11, 14);
@@ -699,7 +725,7 @@ export function renderPlant(
   // Outer wooden sand tray rim (wide panoramic terrace with mitered joinery)
   ctx.fillStyle = state.darkMode ? "#0b0f17" : "#544537";
   ctx.beginPath();
-  ctx.roundRect(-420, 14, 840, 96, [12]);
+  safeRoundRect(ctx, -420, 14, 840, 96, [12]);
   ctx.fill();
 
   // Subtle dark bevel and cast shadow for depth
@@ -710,7 +736,7 @@ export function renderPlant(
   // Fine granite gravel sand bed
   ctx.fillStyle = sandBg;
   ctx.beginPath();
-  ctx.roundRect(-414, 17, 828, 90, [10]);
+  safeRoundRect(ctx, -414, 17, 828, 90, [10]);
   ctx.fill();
 
   // Meditative combed horizontal sand grooves across wide courtyard
@@ -903,7 +929,7 @@ export function renderPlant(
 
     ctx.fillStyle = potBodyColor;
     ctx.beginPath();
-    ctx.roundRect(-85, 2, 170, 36, [6, 6, 16, 16]);
+    safeRoundRect(ctx, -85, 2, 170, 36, [6, 6, 16, 16]);
     ctx.fill();
 
     ctx.strokeStyle = potBorderColor;
@@ -934,7 +960,7 @@ export function renderPlant(
     ctx.strokeStyle = potRimHighlight;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(-88, 0, 176, 8, [4]);
+    safeRoundRect(ctx, -88, 0, 176, 8, [4]);
     ctx.stroke();
   }
 
@@ -981,7 +1007,7 @@ export function renderPlant(
   if (isWinterSeason) {
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     ctx.beginPath();
-    ctx.roundRect(-86, -1, 172, 3.5, [2]);
+    safeRoundRect(ctx, -86, -1, 172, 3.5, [2]);
     ctx.fill();
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
@@ -1663,5 +1689,223 @@ export function renderWaterDroplets(
     ctx.arc(d.x - d.radius * 0.3, d.y - d.radius * 0.3, d.radius * 0.35, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+/**
+ * Calculates world coordinates of the brass rose head (Hasuguchi) of the copper watering can.
+ */
+export function getCopperCanRosePosition(can: WateringCanState): { x: number; y: number; angle: number } {
+  const cosT = Math.cos(can.tiltAngle);
+  const sinT = Math.sin(can.tiltAngle);
+  // Spout tip relative to can center at rest: (-44, -22)
+  const localX = -44;
+  const localY = -22;
+  const worldX = can.x + (localX * cosT - localY * sinT);
+  const worldY = can.y + (localX * sinT + localY * cosT);
+  return {
+    x: worldX,
+    y: worldY,
+    angle: -Math.PI * 0.62 + can.tiltAngle,
+  };
+}
+
+/**
+ * Procedurally renders an authentic Japanese copper bonsai watering can (Dō-sei Jōro / 銅製じょうろ).
+ * Features a slender gooseneck spout, perforated brass rose (Hasuguchi), overhead arch handle,
+ * rear tipping grip, and dynamic lift/tilt animation.
+ */
+export function renderCopperWateringCan(
+  ctx: CanvasRenderingContext2D,
+  can: WateringCanState
+): void {
+  if (!can || !can.active || can.alpha <= 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, can.alpha));
+
+  // Soft ambient ground shadow beneath the can
+  const shadowY = can.y + 68;
+  const shadowScale = Math.max(0.4, 1.0 - can.liftProgress * 0.25);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
+  ctx.beginPath();
+  ctx.ellipse(can.x - 6, shadowY, 30 * shadowScale, 7 * shadowScale, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Position and tilt the can smoothly
+  ctx.translate(can.x, can.y);
+  ctx.rotate(can.tiltAngle);
+
+  // 1. Rear tipping grip handle
+  ctx.strokeStyle = "#a84824";
+  ctx.lineWidth = 3.6;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(18, -12);
+  ctx.bezierCurveTo(40, -16, 42, 18, 19, 21);
+  ctx.stroke();
+
+  // Handle specular copper highlight
+  ctx.strokeStyle = "#f39c6b";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(19, -11);
+  ctx.bezierCurveTo(38, -14, 40, 16, 20, 19);
+  ctx.stroke();
+
+  // 2. Main hand-beaten copper vessel body
+  const bodyGrad = ctx.createLinearGradient(-20, -18, 22, 22);
+  bodyGrad.addColorStop(0, "#f3a67d"); // Specular copper highlight
+  bodyGrad.addColorStop(0.28, "#cf6f42"); // Polished copper
+  bodyGrad.addColorStop(0.70, "#994420"); // Deep red-copper
+  bodyGrad.addColorStop(1, "#54210d"); // Shadowed copper base
+
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.moveTo(-16, -17);
+  ctx.lineTo(16, -17);
+  ctx.lineTo(21, 21);
+  ctx.lineTo(-19, 21);
+  ctx.closePath();
+  ctx.fill();
+
+  // Subtle verdigris green patina seam and beaten copper ring
+  ctx.strokeStyle = "rgba(78, 127, 110, 0.4)";
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(-18, 19);
+  ctx.lineTo(20, 19);
+  ctx.stroke();
+
+  // Polished rim highlight
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(-14, -15);
+  ctx.lineTo(14, -15);
+  ctx.stroke();
+
+  ctx.strokeStyle = "#6b2a12";
+  ctx.lineWidth = 1.0;
+  ctx.stroke();
+
+  // 3. Top arch carrying handle
+  ctx.strokeStyle = "#cf6f42";
+  ctx.lineWidth = 3.2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-9, -17);
+  ctx.bezierCurveTo(-13, -44, 13, -44, 9, -17);
+  ctx.stroke();
+
+  ctx.strokeStyle = "#f3a67d";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(-7, -17);
+  ctx.bezierCurveTo(-11, -41, 11, -41, 7, -17);
+  ctx.stroke();
+
+  // 4. Long slender gooseneck spout (Schwanenhals)
+  const spoutGrad = ctx.createLinearGradient(-18, 14, -44, -22);
+  spoutGrad.addColorStop(0, "#8c3b1a");
+  spoutGrad.addColorStop(0.55, "#d97746");
+  spoutGrad.addColorStop(1, "#f59e0b");
+
+  ctx.strokeStyle = spoutGrad;
+  ctx.lineWidth = 4.2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-18, 14);
+  ctx.bezierCurveTo(-26, 12, -33, -3, -44, -22);
+  ctx.stroke();
+
+  // Spout inner highlight
+  ctx.strokeStyle = "rgba(255, 240, 210, 0.7)";
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(-18, 13);
+  ctx.bezierCurveTo(-26, 11, -33, -3, -43, -21);
+  ctx.stroke();
+
+  // 5. Perforated brass rose head (Hasuguchi / 蓮口)
+  ctx.save();
+  ctx.translate(-44, -22);
+  ctx.rotate(-0.45);
+
+  // Brass collar
+  ctx.fillStyle = "#b45309";
+  ctx.fillRect(-2, -3, 4, 6);
+
+  // Perforated shower plate
+  const roseGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, 9);
+  roseGrad.addColorStop(0, "#fef08a");
+  roseGrad.addColorStop(0.55, "#eab308");
+  roseGrad.addColorStop(1, "#78350f");
+
+  ctx.fillStyle = roseGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 8.5, 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = "#fef9c3";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Perforated water jet holes
+  ctx.fillStyle = "#451a03";
+  const holeOffsets = [
+    [0, 0], [-4, 0], [4, 0],
+    [-2, -2], [2, -2], [-2, 2], [2, 2],
+  ];
+  for (const [hx, hy] of holeOffsets) {
+    ctx.beginPath();
+    ctx.arc(hx, hy, 0.7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+  ctx.restore();
+}
+
+/**
+ * Renders fine arched streaming water lines (dünne Wasserstriche)
+ * spraying in a gentle parabolic fan from the watering can.
+ */
+export function renderWaterStreams(
+  ctx: CanvasRenderingContext2D,
+  streams: WaterStreamJet[]
+): void {
+  if (!streams || streams.length === 0) return;
+
+  ctx.save();
+  ctx.lineCap = "round";
+
+  for (const s of streams) {
+    if (s.alpha <= 0.01) continue;
+    const speed = Math.hypot(s.vx, s.vy);
+    if (speed < 0.1) continue;
+
+    const tailLen = Math.min(s.len, speed * 0.12);
+    const tailX = s.x - (s.vx / speed) * tailLen;
+    const tailY = s.y - (s.vy / speed) * tailLen;
+
+    // Outer translucent azure stream jet line
+    ctx.strokeStyle = `rgba(186, 230, 253, ${s.alpha * 0.78})`;
+    ctx.lineWidth = s.thickness || 1.2;
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(s.x, s.y);
+    ctx.stroke();
+
+    // Inner bright specular core
+    ctx.strokeStyle = `rgba(255, 255, 255, ${s.alpha * 0.95})`;
+    ctx.lineWidth = Math.max(0.6, (s.thickness || 1.2) * 0.45);
+    ctx.beginPath();
+    ctx.moveTo(tailX + (s.x - tailX) * 0.35, tailY + (s.y - tailY) * 0.35);
+    ctx.lineTo(s.x, s.y);
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
